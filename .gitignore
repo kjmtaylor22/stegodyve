@@ -5,9 +5,9 @@
 .DS_Store
 .quarto
 *.html
-*.Rmd
 tmp_bkg_run.R
 sourcetracker*
+stego_analysis*
 sjSDM*
 MTM2*
 MBOcc*

@@ -834,7 +834,8 @@ ggtern(sample, aes(x=retreat, y=Unknown, z=soil)) +
         plot.margin = unit(c(-2,0,-2,0.5),"lines"),
         legend.position = "bottom", legend.byrow = F,
         legend.title.position = "left",
-        legend.box="vertical", legend.box.spacing = unit(0.1, "lines"),
+        legend.box="vertical", legend.box.spacing = unit(1, "lines"),
+        legend.box.just="left",
         legend.key.height = unit(0.05,"lines"),
         legend.text = element_text(size=8),
         tern.axis.title.L=element_text(hjust=0),
@@ -850,8 +851,9 @@ meantop <- rbind(data.frame(bact$meanProp, set="Bacteria"),
 
 ggtern(meantop, aes(x=Retreat, y=Unknown, z=Soil, color=g)) +
   facet_wrap(vars(set), scales = "free", strip.position = "top", nrow=1) +
-  geom_point(show.legend = F) +
+  geom_point(aes(shape=set), show.legend = F) +
   scale_color_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
+  scale_shape_manual(values=c(16,15)) +
   theme_light() + theme_showarrows() + 
   theme(tern.panel.mask.show=F, plot.margin = unit(c(-2,0,-2,0.5),"lines"),
         tern.axis.title.L=element_text(hjust=0),
