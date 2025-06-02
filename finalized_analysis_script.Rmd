@@ -20,6 +20,7 @@ output:
     fig_height: 5
     dpi: 300
     framework: "mini"
+    spacing: "normal"
 ---
 
 ```{css echo = FALSE}
@@ -31,7 +32,6 @@ pre {
   max-height: 300px;
   overflow-y: auto;
 }
-
 
 ```
 
@@ -62,18 +62,62 @@ library(gridExtra)
 
 ## Data wrangling
 
+### Tree construction from FNA
+```{bash, eval=F}
+#!/bin/bash
+
+# Job name and who to send updates to
+#SBATCH --job-name=TreeFNA
+#SBATCH --mail-user=****
+#SBATCH --mail-type=ALL
+#SBATCH --account=****
+#SBATCH --partition=****
+#SBATCH --qos=****  
+#SBATCH -o logs/TreeFNA.%j.log
+#SBATCH --error errors/TreeFNA.%j.err
+#SBATCH --nodes=1
+#SBATCH --ntasks=1 
+#SBATCH --cpus-per-task=6
+#SBATCH --mem-per-cpu=12G
+#SBATCH --time=5:00:00
+
+module load qiime2/2021.11
+
+
+qiime tools import \
+  --input-path sv.seqa.fna \
+  --output-path aligned-sequences.qza \
+  --type 'FeatureData[AlignedSequence]'
+
+
+qiime alignment mask \
+  --i-alignment aligned-sequences.qza \
+  --o-masked-alignment MaskedAligned.qza
+  
+    
+qiime phylogeny fasttree \
+  --i-alignment MaskedAligned.qza \
+  --o-tree unrooted-tree.qza
+  
+
+qiime phylogeny midpoint-root \
+  --i-tree unrooted-tree.qza \
+  --o-rooted-tree rooted-tree.qza
+  
+```
+
 ### Bacteria
 ```{r, eval=F}
 library(biomformat)
 
-biom.as.csv("data/bacteria/00...AllSamples.Bac16Sv34-20220330T145802Z-001/00...AllSamples.Bac16Sv34/DADA2_ASV_Distribution/ASV_Table.biom")
+biom.as.csv("data/bacteria/ASV_Table.biom")
 
 taxonomy <- read.csv("data/bacteria/taxonomy.csv")
 taxB <- bact.tax(taxonomy = taxonomy, database = "green")
 
 library(seqinr)
 
-fna <- read.fasta("data/bacteria/00...AllSamples.Bac16Sv34-20220330T145802Z-001/00...AllSamples.Bac16Sv34/DADA2_ASV_Distribution/sv.seqs.fna", forceDNAtolower = F, as.string = T)
+fna <- read.fasta("data/bacteria/sv.seqs.fna", forceDNAtolower = F, as.string = T)
 fna <- fna[names(fna)%in%tax$den.otu]
 write.fasta(fna, names=names(fna), file.out="data/bacteria/reduced-seqs.fna") ## change to Unix with Notepad++; can create fast tree with QIIME2
 
@@ -136,7 +180,7 @@ newmeta <- newmeta %>% separate(capture_web_area, c("cap_length","cap_width","ca
   mutate(cap_volume=cap_length*cap_width*cap_height) %>%
   mutate(ret_volume=ret_length*ret_width*ret_height)
 
-reads <- read.csv("data/bacteria/00...AllSamples.Bac16Sv34-20220330T145802Z-001/00...AllSamples.Bac16Sv34/Sample_Information/absolute.abundance.csv", row.names=1)
+reads <- read.csv("data/bacteria/absolute.abundance.csv", row.names=1)
 
 metaB <- left_join(newmeta, reads[,1:5], by=c("SampleID"="customer_label"))
 metaB$Ct <- as.numeric(metaB$Ct)
@@ -165,14 +209,14 @@ save(commB, taxB, metaB, unifracB, brayB, file="data/bacteria/basefiles_bact.RD"
 ```{r, eval=F}
 library(biomformat)
 
-biom.as.csv("data/fungi/00...AllSamples.FungiITS-20220627T124452Z-001/00...AllSamples.FungiITS/DADA2_ASV_Distribution/ASV_Table.biom")
+biom.as.csv("data/fungi/ASV_Table.biom")
 
 taxonomy <- read.csv("data/fungi/taxonomy.csv")
 taxF <- bact.tax(taxonomy = taxonomy, database = "fungi")
 
 library(seqinr)
 
-fna <- read.fasta("data/fungi/00...AllSamples.FungiITS-20220627T124452Z-001/00...AllSamples.FungiITS/DADA2_ASV_Distribution/sv.seqs.fna", forceDNAtolower = F, as.string = T)
+fna <- read.fasta("data/fungi/sv.seqs.fna", forceDNAtolower = F, as.string = T)
 fna <- fna[names(fna)%in%taxF$den.otu]
 write.fasta(fna, names=names(fna), file.out="data/fungi/reduced-seqs.fna") ## change to Unix with Notepad++; can create fast tree with QIIME2
 
@@ -195,7 +239,7 @@ brayF <- vegan::vegdist(commF) %>% as.matrix()
 
 load('data/bacteria/basefiles_bact.RD')
 
-metaF <- read.csv("data/fungi/00...AllSamples.FungiITS-20220627T124452Z-001/00...AllSamples.FungiITS/Sample_Information/absolute.abundance.csv")[,-1]
+metaF <- read.csv("data/fungi/absolute.abundance.csv")[,-1]
 metaF <- metaF[metaF$customer_label%in%row.names(commF),]
 metaF <- left_join(metaF, metaB[,-c(29:32)], by=c("customer_label"="SampleID"))
 names(metaF)[1] <- "SampleID"
@@ -231,9 +275,9 @@ load("data/fungi/basefiles_fungi.RD")
 rm(unifracB, unifracF) ## not used here
 ```
 
-## 0. Spatial and environmental gradients
+## 0. Spatial and environmental gradients (Figure 1A)
 
-```{r 00_gradientFigA, fig.width=14.3, fig.height=3.9}
+```{r 00_gradient_Figure1A, fig.width=14.3, fig.height=3.9}
 
 all(unique(metaB$column_name) %in% unique(metaF$column_name))
 set <- unique(metaB[,c("column_name", "country", "Temp", "AridIndex", "latitude", "longitude")]) %>%
@@ -313,27 +357,6 @@ rareF <- left_join(rareF, metaF[,c("SampleID","WebType")], by=c("Site"="SampleID
 save(rareB, rareF, file="output/rarecurves.RD")
 ```
 
-```{r 01_rarecurves_plots}
-load("output/rarecurves.RD")
-
-egg::ggarrange(
-  
-  ggplot(rareB, aes(Sample, Species, group=Site, color=WebType)) + 
-    theme_bw() + labs(title="Bacteria") +
-    facet_wrap(vars(WebType), ncol=1) +
-    scale_color_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
-    geom_line(show.legend = F),
-  
-  ggplot(rareF, aes(Sample, Species, group=Site, color=WebType)) + 
-    theme_bw() + labs(title="Fungi") +
-    facet_wrap(vars(WebType), ncol=1) +
-    scale_color_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
-    geom_line(show.legend = F),
-  
-  nrow=1)
-
-rm(rareB, rareF)
-```
 
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
 
@@ -346,7 +369,7 @@ alB <- alphadiv(commB, metaB, "WebType", cols=c("#4DAF4A","#377EB8", "#E41A1C"),
 
 # Faith's PD
 tree <- ape::read.tree("data/bacteria/tree.nwk")
-pdcomm <- commB; names(pdcomm) <- taxB$den.otu
+pdcomm <- commB; names(pdcomm) <- taxB$den.otu#[match(names(pull.commB),taxB$tag)]
 pruned <- picante::prune.sample(pdcomm, tree)
 pd <- picante::pd(pdcomm, pruned)
 
@@ -362,17 +385,23 @@ alB[,-1] %>% group_by(group.id) %>% summarize_all(.funs=list(mean)); hsdB
 ```
 
 #### Beta diversity
-```{r 01_bacteriaDispersion}
+```{r 01_bacteriaDispersion, message=T}
+#brayB <- brayB[row.names(pull.commB), row.names(pull.commB)]
+#metaB <- metaB[row.names(pull.commB),]
+
 ## Beta dispersion
 identical(row.names(brayB),row.names(metaB))
 identical(colnames(brayB),row.names(metaB))
 
-bdispB <- betadisper(as.dist(brayB), group = metaB$WebType)
-pairwiseAdonis::pairwise.adonis(brayB, bdispB$group)
+bdispB <- betadisper(as.dist(brayB), group = metaB$WebType, "centroid")
+
 adonis2(brayB ~ WebType*country, data = metaB)
+pairwiseAdonis::pairwise.adonis2(brayB ~ WebType*country, metaB)
+
 anova(bdispB)
 
-round(TukeyHSD(bdispB)$group,4) %>% as.data.frame() %>% tibble::rownames_to_column("test")
+hsdB <- rbind(hsdB, cbind(index="Dispersion", round(TukeyHSD(bdispB)$group, 4) %>%
+   as.data.frame() %>% tibble::rownames_to_column("test"))); hsdB
 ```
 
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
@@ -386,7 +415,7 @@ alF <- alphadiv(commF, metaF, "WebType", cols=c("#4DAF4A","#377EB8", "#E41A1C"),
 
 # Faith's PD
 tree <- ape::read.tree("data/fungi/treeFungi.nwk")
-pdcomm <- commF; names(pdcomm) <- taxF$den.otu
+pdcomm <- commF; names(pdcomm) <- taxF$den.otu#[match(names(pull.commF),taxF$tag)]
 pruned <- picante::prune.sample(pdcomm, tree)
 pd <- picante::pd(pdcomm, pruned)
 
@@ -398,25 +427,33 @@ hsdF <- data.frame(); for (i in names(alF)[c(2,3,4,7)]){
                      round(TukeyHSD(aov(eval(parse(text=i)) ~ group.id, alF))$group.id,4) %>%
                         as.data.frame() %>% tibble::rownames_to_column("test")))
 }
-alF[,-1] %>% group_by(group.id) %>% summarize_all(.funs=list(mean)); hsdF
+hsdF
+
+alF[,-1] %>% group_by(group.id) %>% summarize_all(.funs=list(mean))
 ```
 
 #### Beta diversity
-```{r 01_fungiDispersion}
+```{r 01_fungiDispersion, message=T}
+
+#brayF <- brayF[row.names(pull.commF), row.names(pull.commF)]
+#metaF <- metaF[row.names(pull.commF),]
+
 ## Beta dispersion
 identical(labels(brayF)[[1]],row.names(metaF))
 identical(labels(brayF)[[2]],row.names(metaF))
 
-brayF <- brayF[match(row.names(metaF),row.names(brayF)),match(row.names(metaF),colnames(brayF))]
+brayF <- brayF[row.names(metaF), row.names(metaF)]
 
-bdispF <- betadisper(as.dist(brayF), group = metaF$WebType)
+bdispF <- betadisper(as.dist(brayF), group = metaF$WebType, "centroid")
 
-pairwiseAdonis::pairwise.adonis(brayF, bdispF$group)
-pairwiseAdonis::pairwise.adonis(brayF, metaF$country)
 adonis2(brayF ~ WebType*country, data = metaF)
+
+pairwiseAdonis::pairwise.adonis2(brayF~WebType*country, metaF)
+
 anova(bdispF)
 
-round(TukeyHSD(bdispF)$group,4) %>% as.data.frame() %>% tibble::rownames_to_column("test")
+hsdF <- rbind(hsdF, cbind(index="Dispersion", round(TukeyHSD(bdispF)$group, 4) %>%
+   as.data.frame() %>% tibble::rownames_to_column("test"))); hsdF
 ```
 
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
@@ -454,10 +491,10 @@ mbF <- read.csv("coreplots/venn/fungi/barplots/dataframe.csv")
 mbB$sec.list <- gsub(".", "\n\u2229\n", mbB$sec.list, fixed=T)
 mbF$sec.list <- gsub(".", "\n\u2229\n", mbF$sec.list, fixed=T)
 
-newlab <- c(unique(mbF$sec.list), unique(mbB$sec.list))[c(2,3,1,6,13,12,14)]
+newlab <- c(unique(mbF$sec.list), unique(mbB$sec.list))[c(2,3,1,13,11,12,14)]
 
 # order levels of new labels
-mbB$sec.list <- factor(mbB$sec.list, levels=unique(mbB$sec.list)[c(2,1,3,4,6,5,7)])
+mbB$sec.list <- factor(mbB$sec.list, levels=unique(mbB$sec.list)[c(2,3,1,6,4,5,7)])
 mbF$sec.list <- factor(mbF$sec.list, levels=unique(mbF$sec.list)[c(2,3,1,6,4,5,7)])
 mbB$sec.list <- factor(mbB$sec.list, labels=newlab)
 mbF$sec.list <- factor(mbF$sec.list, labels=newlab)
@@ -483,8 +520,11 @@ mbsummean <- mbsum %>%
   group_by(Group, set, sec.list) %>%
   summarize_at(vars(value), .funs=list(mean))
 
+mbsummean$Group <- factor(mbsummean$Group, levels=c("retreat","capture","soil"))
+
 ```
 
+#### Figure 2
 ```{r 01_SampleComposition_combined, fig.width=9, fig.height=4.5}
 
 library(magick)
@@ -527,7 +567,7 @@ egg::ggarrange(
     geom_vline(xintercept=0, color="grey90", linetype="dashed") +
     geom_segment(aes(x=PCoA1, xend=PCoA1.cent, y=PCoA2, yend=PCoA2.cent), alpha=0.7) +
     geom_point(aes(PCoA1, PCoA2), shape=1) +
-    geom_label(aes(PCoA1.cent, PCoA2.cent, label=g)) +
+    geom_label(aes(PCoA1.cent, PCoA2.cent, label=g), size=3) +
     geom_polygon(data=hull, aes(PCoA1, PCoA2), alpha=0.7, fill=NA) +
     geom_text(data=ve, hjust=1, size=2.5,
               aes(0.45, 0.4, label=paste0("PCoA1: ",round(as.numeric(PCoA1)*100,1),"%\n",
@@ -590,6 +630,99 @@ egg::ggarrange(
 
 ```
 
+
+
+
+#### Figure S1
+```{r 01_FigureS1_rarecurves_plots}
+load("output/rarecurves.RD")
+
+egg::ggarrange(
+  
+  ggplot(rareB, aes(Sample, Species, group=Site, color=WebType)) + 
+    theme_bw() + labs(title="Bacteria") +
+    facet_wrap(vars(WebType), ncol=1) +
+    scale_color_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+    geom_line(show.legend = F),
+  
+  ggplot(rareF, aes(Sample, Species, group=Site, color=WebType)) + 
+    theme_bw() + labs(title="Fungi") +
+    facet_wrap(vars(WebType), ncol=1) +
+    scale_color_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+    geom_line(show.legend = F),
+  
+  nrow=1)
+
+rm(rareB, rareF)
+```
+
+#### Figure S2
+```{r 01_FigureS2a, fig.width=8, fig.height=3}
+divlong <- data.frame(al, Dispersion=c(bdispB$distances, bdispF$distances)) %>%
+  reshape2::melt()
+
+egg::ggarrange(
+  ggplot(divlong[divlong$set=="Bacteria",], aes(group.id, value, fill=group.id)) +
+      facet_wrap(vars(variable), scales="free_y", nrow=1, strip.position = "left") +
+      geom_boxplot(linetype="dashed", outlier.shape = 1) +
+      stat_boxplot(geom = "errorbar", width=0.4, aes(ymin = ..ymax..)) +
+      stat_boxplot(geom = "errorbar", width=0.4, aes(ymax = ..ymin..)) + #
+      stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), 
+                   outlier.shape = 1) +
+      scale_fill_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+      labs(title="Bacteria", x=NULL, y=NULL) + guides(fill="none") +
+      ggthemes::theme_few(base_size = 12) +
+      theme(strip.placement = "outside",
+            axis.ticks.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            plot.title = element_text(size=18, face="bold", family="mono", hjust=0.5)),
+  ggplot(divlong[divlong$set=="Fungi",], aes(group.id, value, fill=group.id)) +
+      facet_wrap(vars(variable), scales="free_y", nrow=1, strip.position = "left") +
+      geom_boxplot(linetype="dashed", outlier.shape = 1) +
+      stat_boxplot(geom = "errorbar", width=0.4, aes(ymin = ..ymax..)) +
+      stat_boxplot(geom = "errorbar", width=0.4, aes(ymax = ..ymin..)) + 
+      stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), 
+                   outlier.shape = 1) +
+      scale_fill_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+      labs(title="Fungi", x=NULL, y=NULL) + guides(fill="none") +
+      ggthemes::theme_few(base_size = 12) +
+      theme(strip.placement = "outside",
+            axis.ticks.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            plot.title = element_text(size=18, face="bold", family="mono", hjust=0.5)),
+ncol=1)
+```  
+
+```{r 01_FigureS2b, fig.width=8, fig.height=5}
+divsig <- rbind(data.frame(hsdB, set="Bacteria"),
+                data.frame(hsdF, set="Fungi")) %>%
+  tidyr::separate(test,c("type1","type2"), remove = F)
+
+egg::ggarrange(
+  ggplot(divsig[divsig$set=="Bacteria",]) + labs(title="Bacteria", y=NULL) +
+    facet_wrap(vars(index),scales="free_x", ncol=1) +
+    ggthemes::theme_clean() +
+    geom_vline(xintercept=0, color="grey40", linetype="dashed") +
+    geom_errorbar(aes(xmin=lwr, xmax=upr, y=test,
+                      color=ifelse(upr<0|lwr>0,"**","ns")), show.legend = F) +
+    geom_point(aes(x=diff, y=test,
+                      color=ifelse(upr<0|lwr>0,"**","ns")), show.legend = F) +
+    scale_color_manual(values=c("blue","black")),
+  ggplot(divsig[divsig$set=="Fungi",]) + labs(title="Fungi", y=NULL) +
+    facet_wrap(vars(index),scales="free_x", ncol=1) +
+    ggthemes::theme_clean() +
+    geom_vline(xintercept=0, color="grey40", linetype="dashed") +
+    geom_errorbar(aes(xmin=lwr, xmax=upr, y=test,
+                      color=ifelse(upr<0|lwr>0,"**","ns")), show.legend = F) +
+    geom_point(aes(x=diff, y=test,
+                      color=ifelse(upr<0|lwr>0,"**","ns")), show.legend = F) +
+    scale_color_manual(values=c("blue","black")),
+ncol=2)
+
+```
+
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
 
 ## 2. Sources & sinks {.tabset}
@@ -628,8 +761,7 @@ alpha1 <- alpha2 <- 0.001
 ```
 
 ### 2.1 Run on bacteria
-```{r 02_SourceTracker_bacteria, eval=F}
-## SourceTracker model builder
+```{r 02_bacteriaSetup}
 
 # reduce the sample set to locations that have samples from all three types
 st.set <- names(which(summary(as.factor(metaB$column_name))==3))[-7] # remove poorly sampled
@@ -640,6 +772,10 @@ envs <- pullB$WebType
 # reduce the community matrix to the reduced set and remove columns containing all zeroes
 pull.commB <- commB[pullB$SampleID,] %>% .[,-which(colSums(.)==0)]
 
+```
+
+```{r 02_SourceTracker_bacteria, eval=F}
+## SourceTracker model builder
 
 # extract the source environments and source/sink indices
 source.list <- list(m1= which(pullB$WebType%in%c("soil", "retreat")),
@@ -665,8 +801,8 @@ save(rB, pull.commB, pullB, taxB, file="output/sourcetracker_analysis_bacteria.R
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
 
 ### 2.2 Run on fungi
-```{r 02_SourceTracker_fungi, eval=F}
-## SourceTracker model builder
+
+```{r 02_fungiSetup}
 
 # reduce the sample set to locations that have samples from all three types
 st.set <- names(which(summary(as.factor(metaF$column_name))==3))[-10] # remove poorly sampled
@@ -676,6 +812,11 @@ pullF <- metaF[which(metaF$column_name%in%st.set),]
 envs <- pullF$WebType
 # reduce the community matrix to the reduced set and remove columns containing all zeroes
 pull.commF <- commF[pullF$SampleID,] %>% .[,-which(colSums(.)==0)]
+
+```
+
+```{r 02_SourceTracker_fungi, eval=F}
+## SourceTracker model builder
 
 # extract the source environments and source/sink indices
 source.list <- list(m1= which(pullF$WebType%in%c("soil", "retreat")),
@@ -778,6 +919,8 @@ ST_analysis <- function(x, pc, p, tax, meta){
 ```
 
 ### 2.4 Plots
+
+#### Figure 4
 ```{r 02_SourceTracker_plots1, fig.width=3, fig.height=4}
 ## load model outputs SourceTracker analysis
 load("output/sourcetracker_analysis_bacteria.RD")
@@ -800,7 +943,25 @@ ggplot(g0) +
   geom_density(aes(Unknown), color="#4DAF4A", fill="#4DAF4A", alpha=0.3) 
 ```
 
-```{r 02_SourceTracker_plots2, fig.height=6}
+```{r 02_SourceTracker_plots2}
+## visualize ASV distribution on ternary plot
+meantop <- rbind(data.frame(bact$meanProp, set="Bacteria"),
+                 data.frame(fung$meanProp, set="Fungi"))
+
+## summarizes previous plot in a pie chart
+ggplot(meantop) + 
+  facet_wrap(vars(set), strip.position = "top", nrow=1) +
+  stat_count(aes("", fill=g), geom="bar", color="white", position="fill", show.legend = F) +
+  stat_count(aes(x=1.15, fill=g, label=paste(..fill.., ..count.., sep="\n")), size=4.5,
+             geom="label", color="white", position=position_fill(0.5), show.legend=F) +
+  scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
+  coord_polar("y",) + labs(tag="(B)") + theme_void() + 
+  theme(plot.margin = unit(c(-4,-1,-5,-3),"lines"),
+        strip.text=element_text(family="mono", face="bold", size=20))
+```
+
+#### Figure S4
+```{r 02_SourceTracker_FigureS4a, fig.width=6, fig.height=7}
 ## visualize sample distribution on ternary plot
 sample <- rbind(data.frame(bact$meanContent[order(bact$meanContent$column_name),],
                            set="Bacteria"),
@@ -817,64 +978,57 @@ saf <- which(sample$country=="South Africa")
 sample$shape <- factor(sample$shape, labels=c(1,8))
 sample$shape <- as.numeric(as.character(sample$shape))
 sample$color[nam] <- rep(colorRampPalette(c("pink","magenta"))(4),2)
-sample$color[saf] <- colorRampPalette(c("powderblue","mediumblue")
+sample$color[saf] <- colorRampPalette(c("green","turquoise","navy")
                                       )(9)[c(1,1,2,2,3,4,5,5,6,7,8,8,9,9)]
 
-ggtern(sample, aes(x=retreat, y=Unknown, z=soil)) +
-  facet_wrap(vars(set), scales = "free", strip.position = "top", nrow=1) +
-  geom_point(aes(color=column_name, shape=country), size=2) + 
-  theme_light() + theme_showarrows() + labs(color=NULL,shape=NULL) +
-  scale_color_manual(values=unique(sample$color)) +
-  scale_shape_manual(values=c(1,8)) +
-  guides(color=guide_legend(title="Site name", nrow=4,
-    override.aes = list(color=unique(sample[,12:13])$color,
-                        shape=unique(sample[,12:13])$shape)),
-         shape=guide_legend(title="Country", order=1, nrow=1)) +
-  theme(tern.panel.mask.show=F, 
-        plot.margin = unit(c(-2,0,-2,0.5),"lines"),
-        legend.position = "bottom", legend.byrow = F,
-        legend.title.position = "left",
-        legend.box="vertical", legend.box.spacing = unit(1, "lines"),
-        legend.box.just="left",
-        legend.key.height = unit(0.05,"lines"),
-        legend.text = element_text(size=8),
-        tern.axis.title.L=element_text(hjust=0),
-        strip.background=element_blank(),
-        strip.text=element_text(family="mono", face="bold", size=20, color="black"))
-
+ggtern::grid.arrange(
+  ggtern(sample, aes(x=retreat, y=Unknown, z=soil)) +
+    facet_wrap(vars(set), scales = "free", strip.position = "top", ncol=1) +
+    geom_point(aes(color=column_name, shape=country), size=2) + 
+    theme_light() + theme_showarrows() + 
+    labs(title="Average site assignment", color=NULL,shape=NULL) +
+    scale_color_manual(values=unique(sample$color)) +
+    scale_shape_manual(values=c(1,8)) +
+    guides(color=guide_legend(title="Site name", nrow=4,
+      override.aes = list(color=unique(sample[,12:13])$color,
+                          shape=unique(sample[,12:13])$shape)),
+           shape=guide_legend(title="Country", order=1, nrow=1)) +
+    theme(tern.panel.mask.show=F, 
+          plot.margin = unit(c(0,-2,0,-2),"cm"),
+          legend.position = "bottom", legend.byrow = F,
+          legend.justification = 0.2,
+          legend.title.position = "top",
+          legend.box="vertical", 
+          legend.box.just="left",
+          legend.key.height = unit(0.05,"lines"),
+          legend.key.spacing = unit(0.1, "mm"),
+          legend.text = element_text(size=8),
+          legend.spacing = unit(1,"mm"),
+          tern.axis.title.L=element_text(hjust=0),
+          strip.background=element_blank(),
+          strip.text=element_text(family="mono", face="bold", size=20, color="black")),
+  ggtern(meantop, aes(x=Retreat, y=Unknown, z=Soil, color=g)) +
+    facet_wrap(vars(set), scales = "free", strip.position = "top", ncol=1) +
+    geom_point(aes(shape=set), show.legend = c("shape"=F)) +
+    scale_color_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
+    scale_shape_manual(values=c(16,15)) +
+    theme_light() + theme_showarrows() + 
+    labs(title="ASV source assignment", color="Assignment") + 
+    theme(tern.panel.mask.show=F, 
+          tern.axis.title.L=element_text(hjust=0),
+          legend.position = "bottom", legend.byrow = F,
+          legend.justification = 0.6,
+          legend.title.position = "top",
+          legend.direction = "vertical",
+          legend.key.height = unit(0.05,"lines"),
+          legend.text = element_text(size=8),
+          plot.margin=unit(c(0,-2,1,-2),"cm"),
+          strip.background=element_blank(),
+          strip.text=element_text(family="mono", face="bold", size=20, color="black")),
+nrow=1)
 ```
 
-```{r 02_SourceTracker_plots3}
-## visualize ASV distribution on ternary plot
-meantop <- rbind(data.frame(bact$meanProp, set="Bacteria"),
-                 data.frame(fung$meanProp, set="Fungi"))
-
-ggtern(meantop, aes(x=Retreat, y=Unknown, z=Soil, color=g)) +
-  facet_wrap(vars(set), scales = "free", strip.position = "top", nrow=1) +
-  geom_point(aes(shape=set), show.legend = F) +
-  scale_color_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
-  scale_shape_manual(values=c(16,15)) +
-  theme_light() + theme_showarrows() + 
-  theme(tern.panel.mask.show=F, plot.margin = unit(c(-2,0,-2,0.5),"lines"),
-        tern.axis.title.L=element_text(hjust=0),
-        strip.background=element_blank(),
-        strip.text=element_text(family="mono", face="bold", size=20, color="black"))
-
-## summarizes previous plot in a pie chart
-ggplot(meantop) + 
-  facet_wrap(vars(set), strip.position = "top", nrow=1) +
-  stat_count(aes("", fill=g), geom="bar", color="white", position="fill", show.legend = F) +
-  stat_count(aes(x=1.15, fill=g, label=paste(..fill.., ..count.., sep="\n")), size=4.5,
-             geom="label", color="white", position=position_fill(0.5), show.legend=F) +
-  scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
-  coord_polar("y",) + labs(tag="(B)") + theme_void() + 
-  theme(plot.margin = unit(c(-4,-1,-5,-3),"lines"),
-        strip.text=element_text(family="mono", face="bold", size=20))
-```
-
-```{r 02_SourceTracker_plots4, fig.width=6, fig.heigh=5}
-
-
+```{r 02_SourceTracker_FigureS4b, fig.height=6, fig.width=6}
 ## visualize ASV assignment based on proportion of mean Gibbs draws
 egg::ggarrange(
   ggplot(reshape2::melt(meantop)%>%subset(subset=set=="Bacteria")) + 
@@ -986,7 +1140,7 @@ CrossComp <- function(pc, meta){
   df$colony.wb[df$colony.wb==F] <- "Between colonies"
   df$transect.wb[df$transect.wb==T] <- "Within transect"
   df$transect.wb[df$transect.wb==F] <- "Between transects"
-  df$with.between <- factor(df$with.between, labels=c("Between transects","Within transect", "Within colony"))
+  df$with.between <- factor(df$with.between, labels=c("Between\ntransects","Within\ntransect", "Within\ncolony"))
   df$transect.wb <- factor(df$transect.wb, levels=unique(df$transect.wb))
   df$nestedness <- factor(df$nestedness, levels=unique(df$nestedness))
   
@@ -1015,13 +1169,16 @@ CrossComp <- function(pc, meta){
     summarize_at(vars(cross), .funs=list(max)) %>%
     mutate(y=0, yend=0, bars=cross)
   sigdf$bars <- sigdf$bars+seq(0.02,0.04,length=3)
-  sigdf$y[sigdf$rowname=="Within transect-Between transects"] <- 1
-  sigdf$y[sigdf$rowname=="Within colony-Between transects"] <- 1
-  sigdf$y[sigdf$rowname=="Within colony-Within transect"] <- 2
-  sigdf$yend[sigdf$rowname=="Within transect-Between transects"] <- 2
-  sigdf$yend[sigdf$rowname=="Within colony-Between transects"] <- 3
-  sigdf$yend[sigdf$rowname=="Within colony-Within transect"] <- 3
+  sigdf$y[sigdf$rowname=="Within\ntransect-Between\ntransects"] <- 1
+  sigdf$y[sigdf$rowname=="Within\ncolony-Between\ntransects"] <- 1
+  sigdf$y[sigdf$rowname=="Within\ncolony-Within\ntransect"] <- 2
+  sigdf$yend[sigdf$rowname=="Within\ntransect-Between\ntransects"] <- 2
+  sigdf$yend[sigdf$rowname=="Within\ncolony-Between\ntransects"] <- 3
+  sigdf$yend[sigdf$rowname=="Within\ncolony-Within\ntransect"] <- 3
   sigdf <- sigdf[sigdf$`p adj`<0.05,]
+  
+  sigdf <- sigdf %>% group_by(nestedness) %>%
+    mutate(star=mean(c(y,yend)))
   
   ## prepare outbox
   out <- list(data=list("retreat"=retreat,"capture"=capture,"soil"=soil),
@@ -1041,8 +1198,8 @@ save(ccbact, ccfung, file="output/crosscomparison_both.RD")
 
 ```
 
-### 3.1 Plotting functions
-```{r 03_CrossCompar_plotting, fig.width=5, fig.height=7}
+### 3.1 Plots
+```{r 03_CrossCompar_plotting}
 
 CCplot <- function(input, title){
   # pairwise sample distance
@@ -1085,19 +1242,117 @@ CCplot <- function(input, title){
   return(p1)
 }
 
+```
+
+#### Figure 5
+```{r 03_CrossCompar_Figure5, fig.width=4, fig.height=7}
+
 load("output/crosscomparison_both.RD")
 
 df <- rbind(data.frame(ccbact$dist.dat, set="Bacteria"),
             data.frame(ccfung$dist.dat, set="Fungi"))
 
+ggplot(df) + ylim(0,0.7) +
+  facet_grid(nestedness ~ set, switch="y") +
+  geom_boxplot(aes(forcats::fct_rev(with.between), cross, fill=nestedness, alpha=with.between), 
+               show.legend = c("fill"=F)) +
+  scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+  scale_alpha_manual(values=c(0.2,0.6,1)) +  
+  theme_bw(base_size=14) + 
+  theme(axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        legend.position = "bottom",
+        legend.justification = "right",
+        legend.title.position = "bottom",
+        legend.key.spacing = unit(4,"mm"),
+        legend.margin = margin(-0.5,0,0.5,0,"lines"),
+        legend.text = element_text(margin = margin(l = 1)),
+        legend.title = element_text(hjust=0.5, face="bold", family="mono", size=12),
+        strip.text = element_text(hjust=0.5, face="bold", family="mono", size=14),
+        plot.title = element_text(hjust=0.5, face="bold", family="mono", size=20),
+        plot.margin=unit(c(0.5,0.5,0,0.5), "lines")) +
+  coord_cartesian(clip=F) +
+  guides(alpha=guide_legend(reverse = T, keywidth = unit(1, "cm"), byrow=T,
+                         title="Pairwise sample comparison",
+                         override.aes = list(fill=c("grey20","grey55","grey90"), alpha=1))) +  labs(y="Compositional similarity")
+
+
+```
+
+```{r 03_CrossCompar_Figure5_alt, eval=F, echo=F}
+
+load("output/crosscomparison_both.RD")
+
+egg::ggarrange(
+  ggplot(ccbact$dist.dat) + xlim(0,0.7) +
+    facet_wrap(vars(nestedness), dir="v") +
+    geom_boxplot(aes(cross, with.between, fill=nestedness, alpha=with.between), 
+                 show.legend = F) +
+    scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+    scale_alpha_manual(values=c(0,0.5,1)) +  
+    theme_bw(base_size=14) + 
+    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(), legend.position = "bottom",
+          plot.margin=unit(c(1.5,0,0,0.5), "lines"),
+          strip.text = element_text(hjust=0.5, face="bold", family="mono", size=12),
+          plot.title = element_text(hjust=0.5, face="bold", family="mono", size=20)) +
+    labs(title="Bacteria", x="Compositional similarity"),
+  ggplot(ccfung$dist.dat) + xlim(0,0.7) +
+    facet_wrap(vars(nestedness), dir="v") +
+    geom_boxplot(aes(cross, with.between, fill=nestedness, alpha=with.between), 
+                 show.legend = c(fill=F)) +
+    scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+    scale_alpha_manual(values=c(0,0.5,1)) +  
+    theme_bw(base_size=14) + 
+    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
+          axis.title.y = element_blank(), legend.position = "right",
+          legend.title = element_text(hjust=0, face="bold", family="mono", size=12),
+          strip.text = element_text(hjust=0.5, face="bold", family="mono", size=12),
+          legend.key.spacing.y = unit(2, "mm"), 
+          plot.margin=unit(c(1.5,0.5,0,0), "lines"),
+          plot.title = element_text(hjust=0.5, face="bold", family="mono", size=20)) +
+    guides(alpha=guide_legend(reverse = T, keywidth = unit(1, "cm"), byrow=T,
+                         title="Pairwise\nsample\ncomparison",
+                         override.aes = list(fill=c("grey20","grey55","grey90"), alpha=1))) +
+    labs(title="Fungi", x="Compositional similarity"),
+  nrow=1)
+
+```
+
+#### Figure S5
+```{r 03_CrossCompar_FigureS5, fig.width=14, fig.height=8}
+
+df$with.between <- gsub("\n"," ",df$with.between)
+df$with.between <- factor(df$with.between, levels=rev(unique(df$with.between)))
+
 sigdf <- rbind(data.frame(ccbact$sig.df, set="Bacteria"),
                data.frame(ccfung$sig.df, set="Fungi"))
 
+## group-wise similarity
+g3 <- ggplot(df) + 
+  facet_grid(nestedness ~ set, switch="y") + 
+  geom_boxplot(aes(cross, with.between, fill=nestedness, alpha=with.between), 
+               show.legend = c(fill=F)) +
+  geom_segment(data=sigdf, aes(x=bars, xend=bars, y=y, yend=yend), size=0.75) +
+  geom_text(data=sigdf, aes(x=cross+0.06, y=star, label="*"), size=10, vjust=0.8) +
+  scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+  scale_alpha_manual(values=c(0,0.5,1)) +  
+  scale_x_continuous(n.breaks = 3,
+                     limits=round(seq(0,max(df$cross)+0.1, length=2),1)) +
+  theme_bw(base_size=16) + 
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
+        axis.title.y = element_blank(), legend.position = "bottom",
+        plot.margin=unit(c(1.5,1.5,0,0.5), "lines")) +
+  guides(alpha=guide_legend(direction="vertical", title.position = "left", 
+                           reverse = T, keywidth = unit(1, "cm"), title="Sample\nidentity",
+                           override.aes = list(fill=c("grey20","grey55","grey90"), alpha=1))) +
+  labs(fill="Sample identity") + xlab("Compositional similarity")
 
 ##pairwise sample distance
 g0 <- CCplot(ccbact$dist.dat,"Bacteria")
 g1 <- CCplot(ccfung$dist.dat,"Fungi")
-egg::ggarrange(g0, g1, nrow=1)
+#egg::ggarrange(g0, g1, nrow=1)
 
 ## distance-decay regression
 g2 <- ggplot(df, aes(dist*111.11, cross, linetype=transect.wb)) + 
@@ -1124,31 +1379,9 @@ g2 <- ggplot(df, aes(dist*111.11, cross, linetype=transect.wb)) +
         legend.box="vertical",
         legend.spacing.x = unit(3, "lines"), legend.spacing.y = unit(-0.25, "lines"),
         legend.position = "bottom", legend.justification = c(0.75,-1)) +
-  xlab("Distance between colonies (km)") + ylab("Compositional similarity"); g2
+  xlab("Distance between colonies (km)") + ylab("Compositional similarity")
 
 
-## group-wise similarity
-g3 <- ggplot(df) + 
-  facet_grid(nestedness ~ set, switch="y") + 
-  geom_boxplot(aes(cross, with.between, fill=nestedness, alpha=with.between), 
-               show.legend = c(fill=F)) +
-  geom_segment(data=sigdf, aes(x=bars, xend=bars, y=y, yend=yend), size=0.75) +
-  geom_text(data=sigdf, aes(x=cross+0.06, y=2, label="*"), size=10, vjust=0.8) +
-  scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
-  scale_alpha_manual(values=c(0,0.5,1)) +  
-  scale_x_continuous(breaks=round(seq(0,max(df$cross), length=3),3),
-                     limits=round(seq(0,max(df$cross)+0.04, length=2),3)) +
-  theme_bw(base_size=16) + xlim(NA, max(df$cross)+0.1) +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
-        axis.title.y = element_blank(), legend.position = "bottom",
-        plot.margin=unit(c(1.5,1.5,0,0.5), "lines")) +
-  guides(alpha=guide_legend(direction="vertical", title.position = "left", 
-                           reverse = T, keywidth = unit(1, "cm"), title="Sample\nidentity",
-                           override.aes = list(fill=c("grey20","grey55","grey90"), alpha=1))) +
-  labs(fill="Sample identity") + xlab("Compositional similarity"); g3
-```
-
-```{r 03_CrossCompar_plots_combine, fig.width=14, fig.height=8}
 egg::ggarrange(g3, g0, g1, g2, nrow=1, widths=c(2,1,1,2))
 ```
 
@@ -1377,8 +1610,8 @@ sa_bact$reg.model$soil$dist_env
 
 ### 4.2 Varpart analysis
 
-#### MEM
-```{r 04_Processes_MEM}
+#### MEM (Figure S3)
+```{r 04_Processes_MEM_FigureS3}
 genmem <- function(spat){
   ## build Moran Eigenvector Map
   nb.rel<- graph2nb(relativeneigh(spat), sym=T)  ## computation of spatial neighborhood
@@ -1472,23 +1705,26 @@ partitioning <- function(sa, gm){
     
     sigstar <- function(s){
       ss <- rep("   ",length(s))
-      ss[s<0.001] <- "***"
-      ss[s<0.01] <- " **"
       ss[s<0.05] <- "  *"
+      ss[s<0.01] <- " **"
+      ss[s<=0.001] <- "***"
       return(ss)
     }
+    
+    pval <- c(accaES[1,4], accaSE[1,4], NA, NA)
   
     fracts=data.frame(sampletype=sampletype,
                                   labels=c("Envir  ","Spatial","Both","Resid"),
-                                  fracts=c(fract[1]+fract[3],
+                                  sets=c(fract[1]+fract[3],
                                            fract[2]+fract[3],
                                            fract[3],fract[4]),
-                                  signif=sigstar(c(accaES[1,4],
-                                                   accaSE[1,4],
-                                                   NA,NA)))
-    fracts <- mutate(fracts, labels=paste(labels,signif,sep="\n\n"))
+                                  fracts=fract,
+                                  p.val=pval,
+                                  signif=sigstar(pval))
     
-    plotVenn <- draw.pairwise.venn(fracts$fracts[1], fracts$fracts[2],fracts$fracts[3], 
+    fracts <- mutate(fracts, labels=paste(labels, signif, sep="\n\n"))
+    
+    plotVenn <- draw.pairwise.venn(fracts$sets[1], fracts$sets[2],fracts$sets[3], 
                                    fracts$labels[1:2], 
                                    fontfamily="sans", cat.fontfamily="sans", 
                                    col=col, fill=col, alpha=0.3, 
@@ -1519,14 +1755,34 @@ save(vp_bact,vp_fung, file="output/varpart_both.RD")
 
 ```
 
+```{r 04_Processes_CCA_output, message=T}
+
+load("output/varpart_both.RD")
+
+## BACTERIA
+vp_bact$retreat$cca.ES ## retreat env
+vp_bact$retreat$cca.SE ## retreat spatial
+vp_bact$capture$cca.ES ## capture env
+vp_bact$capture$cca.SE ## capture spatial
+vp_bact$soil$cca.ES ## soil env
+vp_bact$soil$cca.SE ## soil spatial
+
+## FUNGI
+vp_fung$retreat$cca.ES ## retreat env
+vp_fung$retreat$cca.SE ## retreat spatial
+vp_fung$capture$cca.ES ## capture env
+vp_fung$capture$cca.SE ## capture spatial
+vp_fung$soil$cca.ES ## soil env
+vp_fung$soil$cca.SE ## soil spatial
+
+```
+
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
 
 ### 4.3 Plots
 
-#### Varpart plots
-```{r 04_plotVenns, fig.width=4, fig.height=5}
-
-load("output/varpart_both.RD")
+#### Varpart (Figure 3)
+```{r 04_ProcessesVarpart_Figure3, fig.width=4, fig.height=5}
 
 g4 <- ggdraw() + 
   draw_plot(as_grob(vp_bact$retreat$plot), 0,0.65,0.45,0.3) + ## panel A top
@@ -1536,7 +1792,7 @@ g4 <- ggdraw() +
                     paste("R^2 ==", sum(vp_bact$capture$fracts$fracts[-4])),
                     paste("R^2 ==", sum(vp_bact$soil$fracts$fracts[-4]))), 
                   c(0.25,0.25,0.25), 
-                  c(0.13,0.43,0.73), 
+                  c(0.73,0.43,0.13), 
                   fontface="plain", size=9, parse=T) +
   draw_plot(as_grob(vp_fung$retreat$plot), 0.5,0.65,0.45,0.3) + ## panel B top
   draw_plot(as_grob(vp_fung$capture$plot), 0.5,0.35,0.45,0.3) + ## panel B middle
@@ -1545,7 +1801,7 @@ g4 <- ggdraw() +
                     paste("R^2 ==", sum(vp_fung$capture$fracts$fracts[-4])),
                     paste("R^2 ==", sum(vp_fung$soil$fracts$fracts[-4]))), 
                   c(0.75,0.75,0.75), 
-                  c(0.13,0.43,0.73), 
+                  c(0.73,0.43,0.13), 
                   fontface="plain", size=9, parse=T) +
   draw_plot_label(c("Bacteria","Fungi"),c(0.05,0.55), c(1,1), 
                   fontface="plain", size=20)
@@ -1553,8 +1809,8 @@ g4 <- ggdraw() +
 g4
 ```
 
-#### Regression plots
-```{r 04_Processes_plots, fig.width=11, fig.height=9}
+#### Regression (Figure 3)
+```{r 04_ProcessesRegression_Figure3, fig.width=11, fig.height=9}
 
 load("output/structuringprocesses_both.RD")
 
