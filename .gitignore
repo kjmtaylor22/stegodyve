@@ -5,6 +5,7 @@
 .DS_Store
 .quarto
 *.html
+LICENSE.md
 archive
 class_level_analysis
 coreplots
