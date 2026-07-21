@@ -43,7 +43,7 @@ knitr::opts_chunk$set(echo = T, eval=T, cache=T,
 
 # Analysis setup
 
-```{r, eval=T}
+```{r, eval=T, cache=F}
 library(stegodyve) # the package written for this analysis
 library(dplyr)
 library(parallel)
@@ -55,7 +55,8 @@ library(spdep)
 library(adegraphics)
 library(VennDiagram)
 library(ggplot2)
-library(ggtern)
+library(Ternary)
+library(ggtree)
 library(cowplot)
 library(gridExtra)
 ```
@@ -272,38 +273,162 @@ rm(list = ls()) ## clear everything from the earlier data wrangling and reload
 load("data/bacteria/basefiles_bact.RD")
 load("data/fungi/basefiles_fungi.RD")
 
-rm(unifracB, unifracF) ## not used here
-```
+colorblind <- c("#66c21f","#3494e4","#e5196b",
+                "#93f5c9","#ffaf73","#8700a2","#373636","grey80")
 
+```
 ## 0. Spatial and environmental gradients (Figure 1A)
 
-```{r 00_gradient_Figure1A, fig.width=14.3, fig.height=3.9}
+```{r 00_gradient_FigureS0}
 
 all(unique(metaB$column_name) %in% unique(metaF$column_name))
 set <- unique(metaB[,c("column_name", "country", "Temp", "AridIndex", "latitude", "longitude")]) %>%
+  left_join(read.csv("../GIS/sitelabels.csv")[,c(2,6)]) %>%
   `row.names<-`(.$column_name)
+
+nam <- subset(set, subset=country=="Namibia")
+saf <- subset(set, subset=country=="South Africa")
+
+m1 <- summary(lm(Temp ~ I(-latitude), nam)) ## namibia
+m3 <- summary(lm(Temp ~ longitude, saf)) ## saf
+
+coef(m1); coef(m3); compare_regressions(m1, m3, "slope")
+
+m2 <- summary(lm(AridIndex ~ I(-latitude), nam)) ## namibia
+m4 <- summary(lm(AridIndex ~ longitude, saf)) ## saf
+
+coef(m2); coef(m4); compare_regressions(m2, m4, "slope")
+
+tf <- coef(lm(range(set$Temp)~range(set$AridIndex)))
+
+egg::ggarrange(
+  ggplot(nam, aes(x=-latitude)) + ggthemes::theme_few() + 
+    labs(title="Temperature & aridity gradient", subtitle="Namibia") +
+    stat_smooth(aes(y=Temp), color="red", method="lm", fullrange = T) +
+    geom_point(aes(y=Temp), color="red", shape=15) +
+    stat_smooth(aes(y=tf[1]+AridIndex*tf[2]), color="blue", method="lm", fullrange = T) +
+    geom_point(aes(y=tf[1]+AridIndex*tf[2]), color="blue", shape=16) +
+    xlab("Latitude (degrees)") + xlim(-25,-21) +
+    theme(axis.text.y.right=element_text(color="blue"),
+          axis.title.y.right=element_text(color="blue"),
+          axis.text.y.left=element_text(color="red"),
+          axis.title.y.left=element_text(color="red")) +
+    scale_y_continuous(name = "Temperature",
+                       sec.axis = sec_axis(trans = ~ (.-tf[1])/tf[2], name = "Aridity Index")) +
+    coord_cartesian(ylim=c(18,21)),
+  ggplot(saf, aes(x=longitude)) + ggthemes::theme_few() + labs(subtitle="South Africa") + 
+    stat_smooth(aes(y=Temp), color="red", method="lm", fullrange = T) +
+    geom_point(aes(y=Temp), color="red", shape=15) +
+    stat_smooth(aes(y=tf[1]+AridIndex*tf[2]), color="blue", method="lm", fullrange = T) +
+    geom_point(aes(y=tf[1]+AridIndex*tf[2]), color="blue", shape=16) +
+    xlab("Longitude (degrees)") + xlim(21,25) +
+    theme(axis.text.y.right=element_text(color="blue"),
+          axis.title.y.right=element_text(color="blue"),
+          axis.text.y.left=element_text(color="red"),
+          axis.title.y.left=element_text(color="red")) +
+    scale_y_continuous(name = "Temperature", 
+                       sec.axis = sec_axis(trans= ~ (.-tf[1])/tf[2], name="Aridity Index",)) +
+    coord_cartesian(ylim=c(18,21)),
+  nrow=1)
+```
+
+```{r 00_gradient_Figure1Av2, fig.width=16.5, fig.height=4.5}
+nam <- nam %>% mutate(AI_scale=tf[1]+AridIndex*tf[2]) %>% 
+  mutate(lab_y=(Temp+AI_scale)/2) %>% .[,-4] %>%
+  reshape2::melt(id.vars=c(1,2,4,5,6,8))
+
+
+saf <- saf %>% mutate(AI_scale=tf[1]+AridIndex*tf[2]) %>% 
+  mutate(lab_y=(Temp+AI_scale)/2) %>% .[,-4] %>% 
+  reshape2::melt(id.vars=c(1,2,4,5,6,8))
+
+egg::ggarrange(
+  ggplot(nam, aes(x=-latitude, y=value, color=variable, fill=variable, alpha=value)) + theme_bw() + 
+    labs(title="Similar change in environmental gradient with space for both transects", 
+         subtitle="Namibia transect (North-South)") +
+    stat_smooth(method="lm", fullrange = T, fill="grey40") +
+    geom_segment(aes(yend=lab_y)) +
+    geom_point(shape=21, size=5, color="white", fill="white", alpha=1) +
+    geom_point(shape=21, size=5, color="#042245") +
+    geom_label(aes(y=lab_y, label=label), color="#042245", fill="white", alpha=1, fontface="bold", size=4, 
+               label.size=0, label.padding=unit(0.05, "lines")) +
+    theme(axis.text.y.right=element_blank(),
+          axis.title.y.right=element_blank(),
+          axis.ticks.y.right=element_blank(),
+          axis.text.y.left=element_text(color="#008e73"),
+          axis.title.y.left=element_text(color="#008e73"),
+          axis.text=element_text(size=22),
+          axis.title=element_text(size=20),
+          legend.position = "none",
+          plot.title = element_text(size=20, face="bold"),
+          plot.subtitle = element_text(size=16),
+          plot.margin = unit(c(1,0,1,1), "lines")) +
+    scale_color_manual(values=c("#693908","#008e73")) +
+    scale_fill_manual(values=c("#a6611a","#5eb3a3")) +
+    scale_alpha_continuous(range=c(0.3,1)) +
+    scale_y_continuous(position="right", 
+                       sec.axis = sec_axis(trans= ~ (.-tf[1])/tf[2], 
+                                           name="Aridity Index", 
+                                           breaks=seq((18-tf[1])/tf[2],(21-tf[1])/tf[2],length=4),
+                                           labels=round(seq((18-tf[1])/tf[2],(21-tf[1])/tf[2],length=4),3))) +
+    xlab("Latitude (degrees)") + xlim(-21,-25) +
+    coord_cartesian(ylim=c(18,21)),
+  ggplot(saf, aes(x=longitude, y=value, color=variable, fill=variable, alpha=value)) + theme_bw() + 
+    labs(subtitle="South Africa transect (East-West)") + 
+    stat_smooth(method="lm", fullrange = T, fill="grey40") +
+    geom_segment(aes(yend=lab_y)) +
+    geom_point(shape=24, size=5, color="white", fill="white", alpha=1) +
+    geom_point(shape=24, size=5, color="#042245") +
+    geom_label(aes(y=lab_y, label=label), color="#042245", fill="white", alpha=1, fontface="bold", size=4, 
+               label.size=0, label.padding=unit(0.05, "lines")) +
+    theme(axis.text.y.right=element_text(color="#693908"),
+          axis.title.y.right=element_text(color="#693908"),
+          axis.text.y.left=element_blank(),
+          axis.title.y.left=element_blank(),
+          axis.ticks.y.left=element_blank(),
+          axis.text=element_text(size=22),
+          axis.title=element_text(size=20),
+          legend.position = "none",
+          plot.subtitle = element_text(size=16),
+          plot.margin = unit(c(1,1,1,0), "lines")) +
+    xlab("Longitude (degrees)") + xlim(25,21) +
+    scale_color_manual(values=c("#693908","#008e73")) +
+    scale_fill_manual(values=c("#a6611a","#5eb3a3")) +
+    scale_alpha_continuous(range=c(0.3,1)) +
+    scale_y_continuous(name="Temperature (°C)", position="right") +
+    coord_cartesian(ylim=c(18,21)),
+  nrow=1)
+```
+
+```{r 00_gradient_Figure1Av1, fig.width=16.5, fig.height=4.5}
+northernmost <- set$column_name[set$label=="N-1"]
+easternmost <- set$column_name[set$label=="SA-11"]
+
 dist <- dist(set[,5:6]) %>% as.matrix %>% reshape2::melt(value.name = "dist")
 env <- dist(set[,3:4]) %>% as.matrix %>% reshape2::melt()
-tri <- matrix(0,nrow(set), nrow(set)) %>% lower.tri(.) %>% reshape2::melt()
-envdist <- cbind(dist, envgrad=env[,3], tri=tri[,3]) %>% subset(subset=tri==T)
+tri <- matrix(0,nrow(set), nrow(set)) %>% lower.tri(., diag=T) %>% reshape2::melt()
+envdist <- cbind(dist, envgrad=env[,3], tri=tri[,3]) %>% 
+  subset(subset=Var1%in%c(northernmost,easternmost))
 
 sample_dist <- left_join(envdist, unique(metaB[,c("column_name","country")]), by=c("Var1"="column_name")) %>%
   left_join(unique(metaB[,c("column_name","country")]), by=c("Var2"="column_name")) %>%
-  mutate(transect.wb=country.x==country.y, compare=paste(country.y, "vs.", country.x))
+  mutate(transect.wb=country.x==country.y, compare=paste(country.y, "vs.", country.x)) %>%
+  left_join(set[,c(1,7)], by=c("Var2"="column_name"))
+
 # re-level factors
 sample_dist$dist <- sample_dist$dist*111.11 # set distances from decimal degrees to km
 sample_dist$transect.wb[sample_dist$transect.wb==T] <- "Within transect"
 sample_dist$transect.wb[sample_dist$transect.wb==F] <- "Between transects"
 sample_dist$transect.wb <- factor(sample_dist$transect.wb, levels=unique(sample_dist$transect.wb))
 sample_dist$compare <- factor(sample_dist$compare, 
-                              labels=c("Namibia vs. Namibia",
+                              labels=c("Namibia: Distance from N-1",
                                        "Namibia vs. South Africa",
                                        "Namibia vs. South Africa",
-                                       "South Africa vs. South Africa"))
-sample_dist$compare <- factor(sample_dist$compare, 
-                              levels=c("Namibia vs. Namibia",
-                                       "South Africa vs. South Africa",
-                                       "Namibia vs. South Africa"))
+                                       "South Africa: Distance from SA-11"))
+#sample_dist$compare <- factor(sample_dist$compare, 
+#                              levels=c("Namibia vs. Namibia",
+#                                       "South Africa vs. South Africa",
+#                                       "Namibia vs. South Africa"))
 
 
 pull <- subset(sample_dist, subset=transect.wb=="Within transect", drop = T)
@@ -311,22 +436,33 @@ lm(envgrad ~ dist*compare, pull) %>% summary()
 aov(Temp ~ country, set) %>% summary()
 aov(AridIndex ~ country, set) %>% summary()
 
+
+sample_dist <- subset(sample_dist, subset=transect.wb=="Within transect", drop = T)
+
 ## Figure 1, Plot A; 
 ggplot(sample_dist, aes(dist, envgrad, linetype=compare, shape=compare)) + 
-  geom_point(size=3) +  scale_shape_manual(values=c(16,8,17)) +
+  facet_grid(~compare, scales="free_x") +
   scale_linetype_manual(values=c("solid","longdash","dotted")) +
   stat_smooth(method="lm", formula='y~x', show.legend = c(color=F), color="black")+
-  ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = c(1050,465,250), label.y=c(1,1.9,0.75),
+  geom_point(size=5) +  scale_shape_manual(values=c(16,8,17)) +
+  ggrepel::geom_text_repel(aes(label=label), fontface="bold", size=4, 
+                           force=50, box.padding=1, direction = "y", seed=3356) +
+  ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = c(100,230), label.y=c(1.5,2.2),
+                        aes(label=..rr.label..), vjust=1.6, size=4.5, geom="label") + 
+  ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = c(100,230), label.y=c(1.5,2.2),
                         aes(label=..eq.label..), vjust=0.8, size=4, geom="label") +
   guides(shape=guide_legend(title=NULL, override.aes = list(size=5)),
          linetype=guide_legend(title=NULL, override.aes = list(linewidth=1.5))) +
-  theme_bw() + theme(axis.text = element_text(size=20),
-                     axis.title = element_text(size=18),
+  theme_bw() + theme(axis.text = element_text(size=22),
+                     axis.title = element_text(size=20),
                      plot.margin=unit(c(1.5,0.5,0,0.5), "lines"), 
-                     legend.text=element_text(margin=margin(0,7,0,0), size=14),
+                     legend.text=element_text(margin=margin(0,7,0,0), size=16),
+                     strip.text=element_text(size=16),
+                     plot.title = element_text(size=20, face="bold"),
                      legend.key.width = unit(2,"cm"),
-                     legend.position = "top", legend.justification = "center") +
-  xlab("Distance between colonies (km)") + ylab("Environmental dissimilarity\n(Temp:AridIndex)")
+                     legend.position = "none", legend.justification = "center") +
+  xlab("Distance between colonies (km)") + ylab("Environmental dissimilarity\n(Temp:AridIndex)") +
+  labs(title="Similar change in environmental gradient with space for both transects")
 
 ```
 
@@ -349,12 +485,54 @@ ggplot(sample_dist, aes(dist, envgrad, linetype=compare, shape=compare)) +
 ## Bacteria
 rareB <- rarecurve(commB, sample=250, tidy=T)
 rareB <- left_join(rareB, metaB[,c("SampleID","WebType")], by=c("Site"="SampleID"))
+rareB <- left_join(rareB, data.frame(Site=row.names(commB),rowSums=rowSums(commB)))
+
 
 ## Fungi
 rareF <- rarecurve(commF, sample=250, tidy=T)
 rareF <- left_join(rareF, metaF[,c("SampleID","WebType")], by=c("Site"="SampleID"))
+rareF <- left_join(rareF, data.frame(Site=row.names(commF),rowSums=rowSums(commF)))
 
 save(rareB, rareF, file="output/rarecurves.RD")
+```
+
+```{r}
+type_stats <- function(x){
+  out <- data.frame(
+    mean=mean(rowSums(x)),
+    median=median(rowSums(x)),
+    min=min(rowSums(x)), 
+    max=max(rowSums(x))     
+  )
+  return(out)
+}
+
+data.frame(
+  ## Total ASVs
+  nASVs=c(ncol(commB), # bacteria
+          ncol(commF)), # fungi
+  ## Total reads
+  totalReads=c(sum(rowSums(commB)), # bacteria
+           sum(rowSums(commF))), # fungi
+  ## Reads per sample
+  rbind(type_stats(commB), # bacteria
+        type_stats(commF)), # fungi
+  row.names=c("Bacteria","Fungi")
+)
+
+data.frame(
+  retreat=t(type_stats(commB[grep("retreat", row.names(commB)),])),
+  capture=t(type_stats(commB[grep("capture", row.names(commB)),])),
+  soil=t(type_stats(commB[grep("soil", row.names(commB)),])),
+  row.names=c("mean","median","min","max")
+)
+
+data.frame(
+  retreat=t(type_stats(commF[grep("retreat", row.names(commF)),])),
+  capture=t(type_stats(commF[grep("capture", row.names(commF)),])),
+  soil=t(type_stats(commF[grep("soil", row.names(commF)),])),
+  row.names=c("mean","median","min","max")
+)
 ```
 
 
@@ -365,7 +543,7 @@ save(rareB, rareF, file="output/rarecurves.RD")
 #### Alpha diversity
 ```{r 01_bacteriaDiversity}
 ## Alpha diversity
-alB <- alphadiv(commB, metaB, "WebType", cols=c("#4DAF4A","#377EB8", "#E41A1C"), "bacteria")
+alB <- alphadiv(commB, metaB, "WebType", cols=colorblind[1:3], "bacteria")
 
 # Faith's PD
 tree <- ape::read.tree("data/bacteria/tree.nwk")
@@ -411,7 +589,7 @@ hsdB <- rbind(hsdB, cbind(index="Dispersion", round(TukeyHSD(bdispB)$group, 4) %
 #### Alpha diversity
 ```{r 01_fungiDiversity}
 ## Alpha diversity
-alF <- alphadiv(commF, metaF, "WebType", cols=c("#4DAF4A","#377EB8", "#E41A1C"), "fungi")
+alF <- alphadiv(commF, metaF, "WebType", cols=colorblind[1:3], "fungi")
 
 # Faith's PD
 tree <- ape::read.tree("data/fungi/treeFungi.nwk")
@@ -468,6 +646,17 @@ hsdF <- rbind(hsdF, cbind(index="Dispersion", round(TukeyHSD(bdispF)$group, 4) %
 shareB <- mbiom.venn(commB, metaB,"WebType", taxB, "bacteria", "tag") %>% 
   # identify the taxa in each section of the diagram
   shared.taxa(., "bacteria", T)
+
+shareB_counts <- lapply(shareB, length) %>% unlist()
+
+vennB <- VennDiagram::draw.triple.venn(sum(shareB_counts[c(1,4,5,7)]), sum(shareB_counts[c(2,4,6,7)]), sum(shareB_counts[c(3,5,6,7)]), 
+                              sum(shareB_counts[c(4,7)]), sum(shareB_counts[c(5,7)]), sum(shareB_counts[c(6,7)]), shareB_counts[7],
+                              category=c("Soil","Retreat","Capture"), fill=colorblind[3:1], col=colorblind[3:1], alpha=0.3, 
+                              lty="solid",lwd=4, cex=3, cat.cex=3, fontfamily="sans", cat.fontfamily = "sans", cat.fontface="bold",
+                              cat.dist=c(0.1,0.1,-0.08), cat.pos=0, cat.default.pos="text")
+
+png("figs/Bacteria_venn.png", 5,5,"in",bg="transparent",res=300); grid.draw(vennB); dev.off()
+
 # use the parsed taxonomic and sample information to look at the distribution of ASV abundances
 mbB <- mbiom.bar(shareB, commB, NULL, taxB, "class", metaB, "WebType","column_name",
             file="bacteria/barplots", F)
@@ -476,6 +665,17 @@ mbB <- mbiom.bar(shareB, commB, NULL, taxB, "class", metaB, "WebType","column_na
 shareF <- mbiom.venn(commF, metaF,"WebType", taxF, "fungi", "tag") %>% 
   # identify the taxa in each section of the diagram
   shared.taxa(., "fungi", T)
+
+shareF_counts <- lapply(shareF, length) %>% unlist()
+
+vennF <- VennDiagram::draw.triple.venn(sum(shareF_counts[c(1,4,5,7)]), sum(shareF_counts[c(2,4,6,7)]), sum(shareF_counts[c(3,5,6,7)]), 
+                              sum(shareF_counts[c(4,7)]), sum(shareF_counts[c(5,7)]), sum(shareF_counts[c(6,7)]), shareF_counts[7],
+                              category=c("Soil","Retreat","Capture"), fill=colorblind[3:1], col=colorblind[3:1], alpha=0.3, 
+                              lty="solid",lwd=4, cex=3, cat.cex=3, fontfamily="sans", cat.fontfamily = "sans", cat.fontface="bold",
+                              cat.dist=c(0.1,0.1,-0.08), cat.pos=0, cat.default.pos="text")
+
+png("figs/Fungi_venn.png", 5,5,"in",bg="transparent",res=300); grid.draw(vennF); dev.off()
+
 # use the parsed taxonomic and sample information to look at the distribution of ASV abundances
 mbF <- mbiom.bar(shareF, commF, NULL, taxF, "class", metaF, "WebType","column_name",
             file="fungi/barplots", F)
@@ -520,7 +720,7 @@ mbsummean <- mbsum %>%
   group_by(Group, set, sec.list) %>%
   summarize_at(vars(value), .funs=list(mean))
 
-mbsummean$Group <- factor(mbsummean$Group, levels=c("retreat","capture","soil"))
+mbsummean$Group <- factor(mbsummean$Group, levels=c("soil","retreat","capture"))
 
 ```
 
@@ -552,14 +752,15 @@ egg::ggarrange(
     stat_boxplot(geom = "errorbar", width=0.4, aes(ymax = ..ymin..)) + 
     stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), 
                  outlier.shape = 1) +
-    scale_fill_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+    scale_fill_manual(values=colorblind[3:1]) +
     labs(title="Diversity", x=NULL) + guides(fill="none") +
     ggthemes::theme_few(base_size = 12) +
     theme(strip.text=element_blank(), 
-          axis.ticks.x = element_blank(),
+          #axis.ticks.x = element_blank(),
           axis.title.x = element_blank(),
-          axis.text.x = element_blank(),
-          plot.title = element_text(size=18, face="bold", family="mono", hjust=0.5)),
+          axis.text.x = element_text(color=colorblind[3:1], 
+                                     angle=90, hjust=1, vjust=0.5),
+          plot.title = element_text(size=12, face="bold", family="mono", hjust=0.5)),
   
   ggplot(cv, aes(color=g)) +
     facet_wrap(vars(set), strip.position="left", ncol=1) +
@@ -572,12 +773,12 @@ egg::ggarrange(
     geom_text(data=ve, hjust=1, size=2.5,
               aes(0.45, 0.4, label=paste0("PCoA1: ",round(as.numeric(PCoA1)*100,1),"%\n",
                                      "PCoA2: ",round(as.numeric(PCoA2)*100,1),"%"))) +
-    scale_color_manual(values=c( "#4DAF4A","#377EB8","#E41A1C")) +
+    scale_color_manual(values=colorblind[1:3]) +
     labs(title="Composition") + 
     guides(color="none") +
     ggthemes::theme_few(base_size = 12) +
     theme(strip.text=element_blank(),
-          plot.title = element_text(size=18, face="bold", family="mono", hjust=0.5)),
+          plot.title = element_text(size=12, face="bold", family="mono", hjust=0.5)),
   
   ggplot(bd, aes(g, dist, fill=g)) +
     facet_wrap(vars(set), scales="free_y", strip.position="left", ncol=1) +
@@ -586,46 +787,52 @@ egg::ggarrange(
     stat_boxplot(geom = "errorbar", width=0.4, aes(ymax = ..ymin..)) + 
     stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), 
                  outlier.shape = 1) +
-    scale_fill_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+    scale_fill_manual(values=colorblind[3:1]) +
     labs(title="Variability", x=NULL, y="Distance to centroid") + guides(fill="none") +
     ggthemes::theme_few(base_size = 12) +
     theme(strip.text=element_blank(),
-          axis.ticks.x = element_blank(),
+          #axis.ticks.x = element_blank(),
           axis.title.x = element_blank(),
-          axis.text.x = element_blank(),
-          plot.title = element_text(size=18, face="bold", family="mono", hjust=0.5)), 
+          axis.text.x = element_text(color=colorblind[3:1], 
+                                     angle=90, hjust=1, vjust=0.5),
+          plot.title = element_text(size=12, face="bold", family="mono", hjust=0.5)), 
    
   ggplot(mbsummean) + 
     facet_wrap(vars(set), scales="free_y", strip.position="left", ncol=1) +
-    geom_col(aes(Group, value, fill=sec.list, color=sec.list),
+    geom_col(aes(Group, value, fill=sec.list), color="white",  linewidth=0.2, 
              position="stack", show.legend = F) +
-    scale_fill_manual(values=c("#e6eff6", "#e9f5e9", "#fae3e1",
-                            "#d4e6e1","#e3d6de","#e6dcd0","#d1d2cc")) +
-    scale_color_manual(values=c("#377EB8", "#4DAF4A", "#E41A1C",
-                            "#035b5b","#b80565","#88510b","black")) +
-    labs(y="Total Mean Relative Abundance (%)", x=NULL, 
-         title="  Distribution", fill="Venn segment", color="Venn segment") +
+    stat_summary(aes(Group, value, color=Group), fun="sum", geom="col",
+                 fill=NA, linewidth=0.4, position="stack", show.legend = F) +
+    #scale_fill_manual(values=c("#d3daff", "#d9eada", "#fbd8fb",
+    #                        "#bfe3ef","#e1caeb","#e6e6b2","#cecece")) +
+    scale_fill_manual(values=colorblind[c(2,1,3,4,6,5,7)]) +
+    scale_color_manual(values=colorblind[c(3,2,1)]) +
+    labs(y="Mean Relative Abundance (%)", x=NULL, 
+         title="  Distribution of shared", fill="Venn segment", color="Venn segment") +
     ggthemes::theme_few(base_size = 12) +
-    coord_cartesian(expand=F,clip="off") + 
+    coord_cartesian(expand=F, clip="off") + 
     theme(panel.border = element_blank(),
-          plot.title = element_text(size=18, face="bold", family="mono"),
+          plot.title = element_text(size=12, face="bold", family="mono"),
           strip.text = element_blank(),
           plot.margin = margin(5,15,1,5),
-          axis.text.x = element_text(color=c("#377EB8", "#4DAF4A", "#E41A1C"), 
+          axis.text.x = element_text(color=colorblind[c(3,2,1)], 
                                      angle=90, hjust=1, vjust=0.5)),
  
   cowplot::plot_grid(
     cowplot::ggdraw() +
-      draw_image("coreplots/venn/bacteria/euler_group_tax_edit.tiff") +
+      draw_image("coreplots/venn/bacteria/euler_group_tax_edit.jpeg") +
       draw_label("Bacteria", colour = "black", fontface="bold", fontfamily = "mono",
-                 size = 18, angle = -90, x=1, vjust=1),
+                 size = 18, angle = -90, x=1, vjust=1) +
+      draw_label("ASVs    ", colour = "black", fontface="bold", fontfamily = "mono",
+                 size = 12, x=0.5, y=1),
     cowplot::ggdraw() +
-      draw_image("coreplots/venn/fungi/euler_group_tax_edit.tiff") +
+      draw_image("coreplots/venn/fungi/euler_group_tax_edit.jpeg") +
       draw_label("Fungi", colour = "black", fontface="bold",fontfamily = "mono",
                  size = 18, angle = -90, x=1, vjust=1),
     ncol=1),
 
-  nrow=1, widths=c(1,2,1,0.5,2)
+  nrow=1, widths=c(1,2,1,0.5,2), labels=c(" A","     B"," C","  D"," "),
+  label.args = list(gp = grid::gpar(fontface="bold", fontsize=18))
 )
 
 ```
@@ -637,21 +844,44 @@ egg::ggarrange(
 ```{r 01_FigureS1_rarecurves_plots}
 load("output/rarecurves.RD")
 
-egg::ggarrange(
-  
-  ggplot(rareB, aes(Sample, Species, group=Site, color=WebType)) + 
+## A function to plot the inset 
+get_hist <- function(df){
+  p <- ggplot(data=df[c(1,4,5)] %>% unique()) +
+    facet_wrap(vars(WebType), ncol=1, scales="free_y") +
+    geom_histogram(aes(rowSums, fill=WebType, color=WebType), alpha=0.5, show.legend = F) + 
+    scale_color_manual(values = colorblind[3:1]) + 
+    scale_fill_manual(values = colorblind[3:1]) +
+    scale_y_continuous(position="right",name = "# Samples", n.breaks=3) +
+    scale_x_continuous(n.breaks=3) +
+    theme_bw() +  ## makes everything smaller
+    theme(panel.background = element_rect(fill="white"),  ## white plot background 
+          axis.title.x = element_blank(), ## tiny axis text
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          plot.background = element_blank())
+  return(p)
+}
+
+h1 <- get_hist(rareB) 
+h2 <- get_hist(rareF) + scale_x_continuous(n.breaks=3, limits=c(0,50000))
+
+g1 <-   ggplot(rareB, aes(Sample, Species, group=Site, color=WebType)) + 
     theme_bw() + labs(title="Bacteria") +
     facet_wrap(vars(WebType), ncol=1) +
-    scale_color_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
-    geom_line(show.legend = F),
-  
-  ggplot(rareF, aes(Sample, Species, group=Site, color=WebType)) + 
+    scale_color_manual(values=colorblind[3:1]) +
+    scale_x_continuous(n.breaks=3) +
+    theme(axis.title.x = element_text(hjust=1.4)) +
+    geom_line(show.legend = F)
+
+g2 <-   ggplot(rareF, aes(Sample, Species, group=Site, color=WebType)) + 
     theme_bw() + labs(title="Fungi") +
     facet_wrap(vars(WebType), ncol=1) +
-    scale_color_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
-    geom_line(show.legend = F),
-  
-  nrow=1)
+    scale_color_manual(values=colorblind[3:1]) +
+    scale_x_continuous(n.breaks=3, limits=c(0,50000)) +
+    theme(axis.title.x = element_text(hjust=1.4)) +
+    geom_line(show.legend = F)
+
+egg::ggarrange(g1, h1, g2, h2, nrow=1)
 
 rm(rareB, rareF)
 ```
@@ -669,7 +899,7 @@ egg::ggarrange(
       stat_boxplot(geom = "errorbar", width=0.4, aes(ymax = ..ymin..)) + #
       stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), 
                    outlier.shape = 1) +
-      scale_fill_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+      scale_fill_manual(values=colorblind[3:1]) +
       labs(title="Bacteria", x=NULL, y=NULL) + guides(fill="none") +
       ggthemes::theme_few(base_size = 12) +
       theme(strip.placement = "outside",
@@ -684,7 +914,7 @@ egg::ggarrange(
       stat_boxplot(geom = "errorbar", width=0.4, aes(ymax = ..ymin..)) + 
       stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), 
                    outlier.shape = 1) +
-      scale_fill_manual(values=c("#E41A1C","#377EB8", "#4DAF4A")) +
+      scale_fill_manual(values=colorblind[3:1]) +
       labs(title="Fungi", x=NULL, y=NULL) + guides(fill="none") +
       ggthemes::theme_few(base_size = 12) +
       theme(strip.placement = "outside",
@@ -845,15 +1075,15 @@ save(rF, pull.commF, pullF, taxF, file="output/sourcetracker_analysis_fungi.RD")
 
 ```{r 02_ST_carpentry}
 ## function to reshape SourceTracker object into data frame for downstream analysis and visualization
-ST_analysis <- function(x, pc, p, tax, meta){
+ST_analysis <- function(x, pc, p, tax, meta, n){
   
   otu.info <- function(stobj, otu.lab){
     otu <- reshape2::melt(stobj$full.results, 
-                          varnames=c("gibbs","source","otu","sample"))
-    otu$otu <- factor(otu$otu, labels=otu.lab)
+                          varnames=c("gibbs","source","tag","sample"))
+    otu$tag <- factor(otu$tag, labels=otu.lab)
     otu$sample <- factor(otu$sample, labels=stobj$samplenames)
     otu$source <- factor(otu$source, labels=stobj$train.envs)
-    out <- otu %>% group_by(source, otu, sample) %>%
+    out <- otu %>% group_by(source, tag, sample) %>%
       summarize_at(vars(value), .funs=list(gibbs.mean=mean, sd=sd)) %>% 
       mutate(se=sd/sqrt(10))
   }
@@ -861,7 +1091,7 @@ ST_analysis <- function(x, pc, p, tax, meta){
   m1.otu <- otu.info(x, otu.lab=colnames(pc)) %>% 
     .[-which(.$gibbs.mean==0),] %>%
     left_join(p, by=c("sample"="SampleID")) %>%
-    left_join(tax, by=c("otu"="tag"))
+    left_join(tax, by=c("tag"="tag"))
  
   # pull sample Gibbs means and sd
   sample <- as.data.frame(x$proportions) %>% 
@@ -871,33 +1101,42 @@ ST_analysis <- function(x, pc, p, tax, meta){
             `colnames<-`(c("ret_sd","soil_sd","unk_sd")))
   
   g0 <- mutate(m1.otu[,1:6], cv=sd/gibbs.mean) %>% 
-    reshape2::dcast(sample+otu~source,value.var="cv")
+    reshape2::dcast(sample+tag~source,value.var="cv") %>%
+    .[,-1] %>% group_by(tag) %>% summarize_all(mean)
+  g0$g.cv <- apply(g0[,-1], 1, min, na.rm=T)
+  g0$g.cv <- apply(g0[,-1], 1, function(y){return(which(y[1:3]==y[4])[1]+1)})
+  #g0$g.cv <- as.numeric(unlist(g0$g.cv))
+  g0$g.cv <- names(g0)[g0$g.cv]
+  g0$g.cv <- factor(g0$g.cv, labels=c("Retreat","Soil","Unknown"))
+  g0$g.cv <- factor(g0$g.cv, levels=c("Soil","Retreat","Unknown"))
+  names(g0)[c(2,3)] <- c("Retreat", "Soil")
+  
   
   gmom <- data.frame(type=c("Retreat","Soil","Unknown"),
-                     skewness=c(moments::skewness(g0$retreat, na.rm=T),
-                                moments::skewness(g0$soil, na.rm=T),
+                     skewness=c(moments::skewness(g0$Retreat, na.rm=T),
+                                moments::skewness(g0$Soil, na.rm=T),
                                 moments::skewness(g0$Unknown, na.rm=T)),
-                     kurtosis=c(moments::kurtosis(g0$retreat, na.rm=T),
-                                moments::kurtosis(g0$soil, na.rm=T),
+                     kurtosis=c(moments::kurtosis(g0$Retreat, na.rm=T),
+                                moments::kurtosis(g0$Soil, na.rm=T),
                                 moments::kurtosis(g0$Unknown, na.rm=T)))
   
-  top5 <- m1.otu %>% group_by(source, otu) %>% 
+  top5 <- m1.otu %>% group_by(source, tag) %>% 
     summarize_at(vars(gibbs.mean), .funs=sum) %>%
     .[order(.$source,.$gibbs.mean, decreasing=T),] %>% 
-    left_join(tax[,2:3], by=c("otu"="tag")) %>%
+    left_join(tax[,2:3], by=c("tag"="tag")) %>%
     group_by(source) %>% mutate(rank=row_number()) %>% 
-    .[which(.$rank<=5),]
+    .[which(.$rank<=n),]
   
   # cast long format df into wide format
-  castop <- m1.otu %>% group_by(otu, sample) %>% 
+  castop <- m1.otu %>% group_by(tag, sample) %>% 
     mutate(amount=gibbs.mean/sum(gibbs.mean))
-  castop <- reshape2::dcast(castop[,c("otu", "column_name", "source", "amount")], 
-                            otu + column_name ~ source) %>% .[,-2] %>%
-    `colnames<-`(c("otu","Retreat","Soil","Unknown"))
+  castop <- reshape2::dcast(castop[,c("tag", "column_name", "source", "amount")], 
+                            tag + column_name ~ source) %>% .[,-2] %>%
+    `colnames<-`(c("tag","Retreat","Soil","Unknown"))
   castop[is.na(castop)] <- 0
   
   # calculate mean proportions for each ASV (across samples)
-  meantop <- castop %>% group_by(otu) %>% summarize_all(.funs=mean)
+  meantop <- castop %>% group_by(tag) %>% summarize_all(.funs=mean)
   k <- character(nrow(meantop))
   k[meantop$Retreat>0.5] <- "Retreat"
   k[meantop$Soil>0.5] <- "Soil"
@@ -910,7 +1149,7 @@ ST_analysis <- function(x, pc, p, tax, meta){
   out <- list(newMeta=m1.otu, 
               meanContent=sample,
               CoefVar=list(CV=g0, moments=gmom),
-              Top5=top5,
+              TopTaxa=top5,
               PropGibbs10=castop, 
               meanProp=meantop)
   
@@ -921,13 +1160,21 @@ ST_analysis <- function(x, pc, p, tax, meta){
 ### 2.4 Plots
 
 #### Figure 4
-```{r 02_SourceTracker_plots1, fig.width=3, fig.height=4}
+```{r 02_SourceTracker_plots1, fig.width=4.5, fig.height=7, cache=T}
 ## load model outputs SourceTracker analysis
 load("output/sourcetracker_analysis_bacteria.RD")
 load("output/sourcetracker_analysis_fungi.RD")
 
-bact <- ST_analysis(rB$m1, pull.commB, pullB, taxB)
-fung <- ST_analysis(rF$m1, pull.commF, pullF, taxF)
+bact <- ST_analysis(rB$m1, pull.commB, pullB, taxB, metaB, 10)
+fung <- ST_analysis(rF$m1, pull.commF, pullF, taxF, metaF, 10)
+
+tmpmetaB <- left_join(set, pullB[,c("SampleID","column_name","WebType")]) %>% na.omit() %>%
+  `row.names<-`(.$SampleID) %>% mutate(newlab=paste(WebType, label, sep="."))
+
+tmpmetaF <- left_join(set, pullF[,c("SampleID","column_name","WebType")]) %>% na.omit() %>%
+  `row.names<-`(.$SampleID) %>% mutate(newlab=paste(WebType, label, sep="."))
+
+#bact$CoefVar$moments; fung$CoefVar$moments
 
 ## Visualize distribution of CV for each source
 g0 <- rbind(data.frame(bact$CoefVar$CV, set="Bacteria"),
@@ -935,26 +1182,94 @@ g0 <- rbind(data.frame(bact$CoefVar$CV, set="Bacteria"),
 
 ggplot(g0) + 
   facet_wrap(vars(set), scales = "free_y", strip.position = "right", ncol=1) +
-  ggthemes::theme_clean() + 
-  theme(strip.text=element_text(family="mono", face="bold", size=16, angle=-90)) +
-  xlab("CV of Gibbs draws") + coord_cartesian(expand=F) +
-  geom_density(aes(soil), color="#E41A1C", fill="#E41A1C", alpha=0.3) +
-  geom_density(aes(retreat), color="#377EB8", fill="#377EB8", alpha=0.3) +
-  geom_density(aes(Unknown), color="#4DAF4A", fill="#4DAF4A", alpha=0.3) 
+  ggthemes::theme_clean(base_size = 18) + 
+  theme(strip.text=element_text(family="mono", face="bold", size=18, angle=-90),
+        strip.background = element_blank()) +
+  labs(x="Mean CV of Gibbs draws", y="n ASVs") + coord_cartesian(expand=F) +
+  geom_density(aes(Soil, after_stat(count)), color=colorblind[3], fill=colorblind[3], alpha=0.3, linewidth=1.8) +
+  geom_density(aes(Retreat, after_stat(count)), color=colorblind[2], fill=colorblind[2], alpha=0.3, linewidth=1.8) +
+  geom_density(aes(Unknown, after_stat(count)), color=colorblind[7], fill=colorblind[7], alpha=0.3, linewidth=1.8) 
 ```
 
-```{r 02_SourceTracker_plots2}
+```{r 02_SourceTracker}
 ## visualize ASV distribution on ternary plot
 meantop <- rbind(data.frame(bact$meanProp, set="Bacteria"),
                  data.frame(fung$meanProp, set="Fungi"))
 
-## summarizes previous plot in a pie chart
+identifysource <- data.frame(meantop,g0)
+identifysource$g[which(as.character(identifysource$g)!=as.character(identifysource$g.cv))]
+identifysource$g.cv[which(as.character(identifysource$g)!=as.character(identifysource$g.cv))]
+
+verifysource <- g0 %>% `names<-`(names(meantop)) %>%
+  reshape2::melt(value.name="CV") %>% 
+  cbind(prop=meantop %>% reshape2::melt(value.name="prop") %>% .[,5]) %>%
+  subset(subset=g==variable)
+```
+
+```{r 02_SourceTracker_plots2, eval=T, echo=T}
 ggplot(meantop) + 
   facet_wrap(vars(set), strip.position = "top", nrow=1) +
   stat_count(aes("", fill=g), geom="bar", color="white", position="fill", show.legend = F) +
   stat_count(aes(x=1.15, fill=g, label=paste(..fill.., ..count.., sep="\n")), size=4.5,
-             geom="label", color="white", position=position_fill(0.5), show.legend=F) +
-  scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
+             geom="label", fontface="bold", color="white", position=position_fill(0.5), show.legend=F) +
+  scale_fill_manual(values=colorblind[c(3,6,2,7)]) +
+  coord_polar("y",) + labs(tag="(B)") + theme_void() + 
+  theme(plot.margin = unit(c(-4,-1,-5,-3),"lines"),
+        strip.text=element_text(family="mono", face="bold", size=20))
+```
+
+```{r 02_SourceTracker_plots3, eval=F, echo=T, fig.width=5, fig.height=5}
+png("figs/Bacteria_piechart.png", 5,5,"in",bg="transparent",res=300)
+ggplot(subset(g0, subset=set=="Bacteria")) + 
+  stat_count(aes("", fill=g.cv), geom="bar", color="white", position="fill", show.legend = F) +
+  stat_count(aes(x=1.1, fill=g.cv, label=paste(..fill.., ..count.., sep="\n")), size=10,
+             geom="text", fontface="bold", color="white", position=position_fill(0.5), show.legend=F) +
+  scale_fill_manual(values=colorblind[c(3,2,7)]) +
+  coord_polar("y",) + theme_void() + 
+  theme(plot.margin = unit(c(-2,-2,-2,-2),"lines"),
+        strip.text=element_text(family="mono", face="bold", size=20))
+dev.off()
+
+png("figs/Fungi_piechart.png", 5,5,"in",bg="transparent",res=300)
+ggplot(subset(g0, subset=set=="Fungi")) + 
+  stat_count(aes("", fill=g.cv), geom="bar", color="white", position="fill", show.legend = F) +
+  stat_count(aes(x=1.1, fill=g.cv, label=paste(..fill.., ..count.., sep="\n")), size=10,
+             geom="text", fontface="bold", color="white", position=position_fill(0.5), show.legend=F) +
+  scale_fill_manual(values=colorblind[c(3,2,7)]) +
+  coord_polar("y",) + theme_void() + 
+  theme(plot.margin = unit(c(-2,-2,-2,-2),"lines"),
+        strip.text=element_text(family="mono", face="bold", size=20))
+dev.off()
+```
+
+
+```{r 02_SourceTracker_plots4, cache=F}
+## summarizes previous plot in a pie chart
+ggplot(identifysource) + 
+  facet_wrap(vars(set), strip.position = "top", nrow=1) +
+  geom_point(aes(Retreat, Retreat.1), color=colorblind[2], shape=1) +
+  geom_point(aes(Soil, Soil.1), color=colorblind[3], shape=1) +
+  geom_point(aes(Unknown, Unknown.1), color=colorblind[7], shape=1, alpha=0.5) +
+  stat_smooth(aes(Retreat, Retreat.1), color=colorblind[2], method="lm", formula=y~log(x)) +
+  stat_smooth(aes(Soil, Soil.1), color=colorblind[3], method="lm", formula=y~log(x)) +
+  stat_smooth(aes(Unknown, Unknown.1), color=colorblind[7], method="lm", formula=y~log(x)) +
+  xlab("Mean assignment proportion") + ylab("CV") + ggthemes::theme_few()
+
+## summarizes previous plot in a pie chart
+ggplot(verifysource) + 
+  facet_grid(set ~ g) +
+  geom_point(aes(prop, CV), shape=1) +
+  stat_smooth(aes(prop, CV), method="lm", formula=y~log(x)) +
+  xlim(0,1) + ylim(0,max(g0[,2:4], na.rm=T)) +
+  xlab("Mean assignment proportion") + ylab("CV") + ggthemes::theme_few()
+
+## summarizes previous plot in a pie chart
+ggplot(verifysource) + 
+  facet_wrap(vars(set), strip.position = "top", nrow=1) +
+  stat_count(aes("", fill=g), geom="bar", color="white", position="fill", show.legend = F) +
+  stat_count(aes(x=1.15, fill=g, label=paste(..fill.., ..count.., sep="\n")), size=4.5,
+             geom="label", fontface="bold", color="white", position=position_fill(0.5), show.legend=F) +
+  scale_fill_manual(values=colorblind[c(3,2,7)]) +
   coord_polar("y",) + labs(tag="(B)") + theme_void() + 
   theme(plot.margin = unit(c(-4,-1,-5,-3),"lines"),
         strip.text=element_text(family="mono", face="bold", size=20))
@@ -975,57 +1290,94 @@ sample$column_name <- factor(sample$column_name, levels=unique(sample$column_nam
 nam <- which(sample$country=="Namibia")
 saf <- which(sample$country=="South Africa")
 
-sample$shape <- factor(sample$shape, labels=c(1,8))
+sample$shape <- factor(sample$shape, labels=c(16,17))
 sample$shape <- as.numeric(as.character(sample$shape))
 sample$color[nam] <- rep(colorRampPalette(c("pink","magenta"))(4),2)
 sample$color[saf] <- colorRampPalette(c("green","turquoise","navy")
                                       )(9)[c(1,1,2,2,3,4,5,5,6,7,8,8,9,9)]
 
-ggtern::grid.arrange(
-  ggtern(sample, aes(x=retreat, y=Unknown, z=soil)) +
-    facet_wrap(vars(set), scales = "free", strip.position = "top", ncol=1) +
-    geom_point(aes(color=column_name, shape=country), size=2) + 
-    theme_light() + theme_showarrows() + 
-    labs(title="Average site assignment", color=NULL,shape=NULL) +
-    scale_color_manual(values=unique(sample$color)) +
-    scale_shape_manual(values=c(1,8)) +
-    guides(color=guide_legend(title="Site name", nrow=4,
-      override.aes = list(color=unique(sample[,12:13])$color,
-                          shape=unique(sample[,12:13])$shape)),
-           shape=guide_legend(title="Country", order=1, nrow=1)) +
-    theme(tern.panel.mask.show=F, 
-          plot.margin = unit(c(0,-2,0,-2),"cm"),
-          legend.position = "bottom", legend.byrow = F,
-          legend.justification = 0.2,
-          legend.title.position = "top",
-          legend.box="vertical", 
-          legend.box.just="left",
-          legend.key.height = unit(0.05,"lines"),
-          legend.key.spacing = unit(0.1, "mm"),
-          legend.text = element_text(size=8),
-          legend.spacing = unit(1,"mm"),
-          tern.axis.title.L=element_text(hjust=0),
-          strip.background=element_blank(),
-          strip.text=element_text(family="mono", face="bold", size=20, color="black")),
-  ggtern(meantop, aes(x=Retreat, y=Unknown, z=Soil, color=g)) +
-    facet_wrap(vars(set), scales = "free", strip.position = "top", ncol=1) +
-    geom_point(aes(shape=set), show.legend = c("shape"=F)) +
-    scale_color_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(1,4,2,3)]) +
-    scale_shape_manual(values=c(16,15)) +
-    theme_light() + theme_showarrows() + 
-    labs(title="ASV source assignment", color="Assignment") + 
-    theme(tern.panel.mask.show=F, 
-          tern.axis.title.L=element_text(hjust=0),
-          legend.position = "bottom", legend.byrow = F,
-          legend.justification = 0.6,
-          legend.title.position = "top",
-          legend.direction = "vertical",
-          legend.key.height = unit(0.05,"lines"),
-          legend.text = element_text(size=8),
-          plot.margin=unit(c(0,-2,1,-2),"cm"),
-          strip.background=element_blank(),
-          strip.text=element_text(family="mono", face="bold", size=20, color="black")),
-nrow=1)
+identifysource$color <- as.character(factor(identifysource$g.cv, labels=colorblind[c(3,2,7)]))
+
+par(mfrow=c(3,2), xpd=T, mar = c(0,0.5,1,0.5), oma=c(0,0.5,1,0.5))
+matrix_layout_custom <- matrix(c(1,2,3,4,5,6), nrow = 3, ncol = 2, byrow = T)
+layout(matrix_layout_custom, widths = c(1,1), heights = c(2.5,2.5,1))
+for (i in unique(sample$set)){
+  if (i=="Bacteria") {main=expression("Average source assignment")}else{main=""}
+  TernaryPlot(point = "up", atip = "", btip = "", ctip = "", main=eval(main),
+              alab = "Unknown", blab = "Soil", clab = "Retreat")
+  TernaryPoints(subset(sample, subset=set==i, select=c("Unknown","soil","retreat")),
+                cex = 1.4, # Point size
+                col = subset(sample, subset=set==i, select="color")[,1],  
+                pch = subset(sample, subset=set==i, select="shape")[,1])
+
+  if (i=="Bacteria") {main=expression("ASV source assignment")}else{main=""}
+  TernaryPlot(point = "up", atip = "", btip = "", ctip = "", main=eval(main),
+              alab = "Unknown", blab = "Soil", clab = "Retreat")
+  TernaryPoints(subset(identifysource, subset=set==i, select=c("Unknown","Soil","Retreat")),
+                cex = 1, # Point size
+                col = subset(identifysource, subset=set==i, select="color")[,1],  
+                pch = 16)
+}
+
+plot(NA, xlim=c(0,1), ylim=c(0,1), type="n", axes=FALSE, xlab="", ylab="")
+legend("top", 
+   legend = unique(sample$column_name),
+   cex = 0.8, bty = "n", pt.cex = 1.8, ncol=4,
+   pch = unique(sample[,c("column_name","shape")])$shape, 
+   col = unique(sample$color))
+
+plot(NA, xlim=c(0,1), ylim=c(0,1), type="n", axes=FALSE, xlab="", ylab="")
+legend("top", 
+   legend = c("Retreat","Soil","Unknown"),
+   cex = 0.8, bty = "n", pch = 16, pt.cex = 1.8,
+   col=colorblind[c(2,3,7)])
+    
+
+# ggtern::grid.arrange(
+#   ggtern(sample, aes(x=retreat, y=Unknown, z=soil)) +
+#     facet_wrap(vars(set), scales = "free", strip.position = "top", ncol=1) +
+#     geom_point(aes(color=column_name, shape=country), size=2) + 
+#     theme_light() + theme_showarrows() + 
+#     labs(title="Average site assignment", color=NULL,shape=NULL) +
+#     scale_color_manual(values=unique(sample$color)) +
+#     scale_shape_manual(values=c(1,8)) +
+#     guides(color=guide_legend(title="Site name", nrow=4,
+#       override.aes = list(color=unique(sample[,12:13])$color,
+#                           shape=unique(sample[,12:13])$shape)),
+#            shape=guide_legend(title="Country", order=1, nrow=1)) +
+#     theme(tern.panel.mask.show=F, 
+#           plot.margin = unit(c(0,-2,0,-2),"cm"),
+#           legend.position = "bottom", legend.byrow = F,
+#           legend.justification = 0.2,
+#           legend.title.position = "top",
+#           legend.box="vertical", 
+#           legend.box.just="left",
+#           legend.key.height = unit(0.05,"lines"),
+#           legend.key.spacing = unit(0.1, "mm"),
+#           legend.text = element_text(size=8),
+#           legend.spacing = unit(1,"mm"),
+#           tern.axis.title.L=element_text(hjust=0),
+#           strip.background=element_blank(),
+#           strip.text=element_text(family="mono", face="bold", size=20, color="black")),
+#   ggtern(meantop, aes(x=Retreat, y=Unknown, z=Soil, color=g)) +
+#     facet_wrap(vars(set), scales = "free", strip.position = "top", ncol=1) +
+#     geom_point(aes(shape=set), show.legend = c("shape"=F)) +
+#     scale_color_manual(values=colorblind[c(3,6,2,7)]) +
+#     scale_shape_manual(values=c(16,15)) +
+#     theme_light() + theme_showarrows() + 
+#     labs(title="ASV source assignment", color="Assignment") + 
+#     theme(tern.panel.mask.show=F, 
+#           tern.axis.title.L=element_text(hjust=0),
+#           legend.position = "bottom", legend.byrow = F,
+#           legend.justification = 0.6,
+#           legend.title.position = "top",
+#           legend.direction = "vertical",
+#           legend.key.height = unit(0.05,"lines"),
+#           legend.text = element_text(size=8),
+#           plot.margin=unit(c(0,-2,1,-2),"cm"),
+#           strip.background=element_blank(),
+#           strip.text=element_text(family="mono", face="bold", size=20, color="black")),
+# nrow=1)
 ```
 
 ```{r 02_SourceTracker_FigureS4b, fig.height=6, fig.width=6}
@@ -1033,25 +1385,445 @@ nrow=1)
 egg::ggarrange(
   ggplot(reshape2::melt(meantop)%>%subset(subset=set=="Bacteria")) + 
     facet_grid(set~g, scales="free_x", space="free") + 
-    geom_bar(aes(otu, value, fill=variable), 
+    geom_bar(aes(tag, value, fill=variable), color=NA, width=1, 
              stat="identity", show.legend = F) +
-    scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(2,1,3)]) +
-    ggthemes::theme_few(base_size = 14) + coord_cartesian(expand=F) +
+    scale_fill_manual(values=colorblind[c(2,3,7)]) +
+    ggthemes::theme_few(base_size = 14) + coord_cartesian(expand=F, clip="off") +
     ylab("Source assignment (%)") + xlab("Capture silk ASVs") + 
     theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
           strip.clip = "off", strip.text.y=element_text(family="mono", face="bold", size=16)),
   ggplot(reshape2::melt(meantop)%>%subset(subset=set=="Fungi")) + 
     facet_grid(set~g, scales="free_x", space="free") + 
-    geom_bar(aes(otu, value, fill=variable), 
+    geom_bar(aes(tag, value, fill=variable), color=NA, width=1, 
              stat="identity", show.legend = F) +
-    scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Set1")[c(2,1,3)]) +
-    ggthemes::theme_few(base_size = 14) + coord_cartesian(expand=F) +
+    scale_fill_manual(values=colorblind[c(2,3,7)]) +
+    ggthemes::theme_few(base_size = 14) + coord_cartesian(expand=F, clip="off") +
     ylab("Source assignment (%)") + xlab("Capture silk ASVs") + 
     theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
           strip.clip="off", strip.text.y=element_text(family="mono", face="bold", size=16)),
   ncol=1)
 
 ```
+
+```{r 02_SourceTracker_FigureS4c, fig.height=4, fig.width=6, fig.show='hold'}
+
+p_site <- pull.commB; p_site[p_site>0] <- 1
+p_site <- data.frame(WebType=tmpmetaB$WebType[match(row.names(p_site), row.names(tmpmetaB))], p_site) %>%
+  group_by(WebType) %>% summarize_all(.funs=function(x){return(sum(x)/length(x))}) %>%
+  tibble::column_to_rownames("WebType") %>% t() %>% as.data.frame() %>% 
+  tibble::rownames_to_column("tag") 
+  
+try1 <- reshape2::melt(bact$meanProp, variable.name="source", value.name="assignment") %>%
+  left_join(p_site) %>% 
+  reshape2::melt(id.vars=1:4, variable.name="sample_type", value.name="site_proportion")
+
+try1$sample_type <- factor(try1$sample_type, levels=sort(levels(try1$sample_type)))
+
+# ggplot(try1) +   ggthemes::theme_few() + 
+#   facet_grid(source ~ sample_type, scales="free_y") +
+#   geom_point(aes(site_proportion, assignment), alpha=0.6, pch=21) +
+#   stat_smooth(aes(site_proportion, assignment), method="lm") +
+#   scale_x_continuous(expand=c(0.1,0)) +
+#   theme(legend.position="bottom") +
+#   coord_cartesian(ylim=c(0,1)) +
+#   xlab("Proportion of sites (per sample type)") +
+#   ylab("Mean proportion of Gibbs draws assigned")
+
+try2 <- bact$CoefVar$CV %>% #.[,-1] %>%
+  #group_by(tag) %>% summarize_all(mean, na.rm=T) %>%
+  reshape2::melt(variable.name="source", value.name="mean_CV") %>%
+  left_join(reshape2::melt(p_site, variable.name="sample_type", value.name="site_proportion")) %>%
+  left_join(unique(bact$meanProp[,c(1,5)]))
+
+
+p_site <- pull.commF; p_site[p_site>0] <- 1
+p_site <- data.frame(WebType=tmpmetaF$WebType[match(row.names(p_site), row.names(tmpmetaF))], p_site) %>%
+  group_by(WebType) %>% summarize_all(.funs=function(x){return(sum(x)/length(x))}) %>%
+  tibble::column_to_rownames("WebType") %>% t() %>% as.data.frame() %>% 
+  tibble::rownames_to_column("tag") 
+  
+try3 <- reshape2::melt(fung$meanProp, variable.name="source", value.name="assignment") %>%
+  left_join(p_site) %>% 
+  reshape2::melt(id.vars=1:4, variable.name="sample_type", value.name="site_proportion")
+
+try3$sample_type <- factor(try3$sample_type, levels=sort(levels(try3$sample_type)))
+
+# ggplot(try2) +   ggthemes::theme_few() + 
+#   facet_grid(source ~ sample_type, scales="free_y") +
+#   geom_point(aes(site_proportion, assignment), alpha=0.6, pch=21) +
+#   stat_smooth(aes(site_proportion, assignment), method="lm") +
+#   scale_x_continuous(expand=c(0.1,0)) +
+#   theme(legend.position="bottom") +
+#   coord_cartesian(ylim=c(0,1)) +
+#   xlab("Proportion of sites (per sample type)") +
+#   ylab("Mean proportion of Gibbs draws assigned")
+
+try4 <- fung$CoefVar$CV %>% #.[,-1] %>%
+  #group_by(tag) %>% summarize_all(mean, na.rm=T) %>%
+  reshape2::melt(variable.name="source", value.name="mean_CV") %>%
+  left_join(reshape2::melt(p_site, variable.name="sample_type", value.name="site_proportion")) %>%
+  left_join(unique(fung$meanProp[,c(1,5)]))
+
+
+try5 <- rbind(data.frame(try1,set="Bacteria"),
+      data.frame(try3, set="Fungi"))
+
+ggplot(try5) + ggthemes::theme_few() + 
+  facet_grid(source ~ sample_type, scales="free_y") +
+  geom_point(aes(site_proportion, assignment, color=set), alpha=0.6, pch=21) +
+  stat_smooth(aes(site_proportion, assignment, color=set), method="lm") +
+  scale_x_continuous(expand=c(0.1,0)) +
+  theme(legend.position="bottom") +
+  coord_cartesian(ylim=c(0,1)) +
+  xlab("Proportion of sites (per sample type)") +
+  ylab("Proportion of Gibbs draws assigned")
+
+ggplot(try5) + ggthemes::theme_few() + 
+  facet_grid(set ~ sample_type, scales="free_y") +
+  geom_point(aes(site_proportion, assignment, color=source), alpha=0.6, pch=21) +
+  stat_smooth(aes(site_proportion, assignment, color=source), method="lm") +
+  scale_x_continuous(expand=c(0.1,0)) +
+  scale_color_manual(values=colorblind[c(2,3,7)]) +
+  theme(legend.position="bottom") +
+  coord_cartesian(ylim=c(0,1)) +
+  xlab("Proportion of sites (per sample type)") +
+  ylab("Proportion of Gibbs draws assigned")
+
+try6 <- rbind(data.frame(try2,set="Bacteria"),
+      data.frame(try4, set="Fungi"))
+
+try7 <- try5 %>% 
+  group_by(set, source, sample_type, site_proportion) %>%
+  summarize_at(vars(assignment), mean)
+  
+ggplot(try7) + ggthemes::theme_few() + 
+  facet_grid(set ~ sample_type, scales="free_x") +
+  geom_col(aes(site_proportion, assignment, color=source, fill=source), position="stack", alpha=0.7) +
+  #stat_smooth(aes(site_proportion, assignment, color=source), method="lm") +
+  #scale_x_continuous(expand=c(0.1,0)) +
+  scale_color_manual(values=colorblind[c(2,3,7)]) +
+  scale_fill_manual(values=colorblind[c(2,3,7)]) +
+  theme(legend.position="bottom") +
+  xlab("Proportion of sites (per sample type)") +
+  ylab("Mean proportion of Gibbs draws assigned")
+
+ggplot(try7) + ggthemes::theme_few() + 
+  facet_grid(set ~ sample_type, scales="free_x") +
+  geom_point(aes(site_proportion, assignment, color=source, fill=source), 
+             alpha=0.4, pch=21, size=1.5, position=position_dodge(width=0.04)) +
+  stat_summary(data=try5, aes(site_proportion, assignment, color=source), fun.data = "mean_cl_normal", 
+               alpha=0.5, geom="errorbar", width=0.1, position=position_dodge(width=0.04)) +
+  stat_smooth(aes(site_proportion, assignment, color=source), method="lm", se=F) +
+  scale_color_manual(values=colorblind[c(2,3,7)]) +
+  scale_fill_manual(values=colorblind[c(2,3,7)]) +
+  theme(legend.position="bottom") + coord_cartesian(ylim=c(-0.5,1.5)) +
+  xlab("Proportion of sites (per sample type)") +
+  ylab("Mean proportion of Gibbs draws assigned")
+
+```
+
+```{r, 02_SourceTracker_FigureS5e, fig.height=5, fig.width=8, fig.show='hold'}
+egg::ggarrange(
+  ggplot(g0) + 
+    facet_wrap(vars(set), scales = "free_y", strip.position = "left", ncol=1) +
+    ggthemes::theme_clean(base_size = 18) + 
+    theme(strip.text.y=element_text(family="mono", face="bold", size=18),
+          strip.background = element_blank(),
+          strip.placement = "outside",
+          axis.text.x=element_text(size=13),
+          axis.title.x = element_text(size=12),
+          plot.margin = margin(2,2,2,2,"mm")) +
+    labs(x="Mean CV of Gibbs draws", y="Number of ASVs") + coord_cartesian(expand=F) +
+    geom_density(aes((Soil), after_stat(count)), 
+                 color=colorblind[3], fill=colorblind[3], alpha=0.3, linewidth=1.8) +
+    geom_density(aes((Retreat), after_stat(count)), 
+                 color=colorblind[2], fill=colorblind[2], alpha=0.3, linewidth=1.8) +
+    geom_density(aes((Unknown), after_stat(count)), 
+                 color=colorblind[7], fill=colorblind[7], alpha=0.3, linewidth=1.8) ,
+  
+  ggplot(try6) + ggthemes::theme_few(base_size = 15, base_family = "sans") + 
+    facet_grid(set ~ sample_type, scales="free_y", ) +
+    geom_point(aes((mean_CV), site_proportion, color=source), alpha=0.6, pch=21) +
+    ggpmisc::stat_ma_line(aes((mean_CV), site_proportion, color=source), method="lmodel2:SMA") +
+    #scale_x_continuous(expand=c(0.15,0)) + #, limits=c(0,1), n.breaks=3) +
+    #scale_x_log10() +
+    scale_y_continuous(position="right") +
+    scale_color_manual(values=colorblind[c(2,3,7)]) +
+    theme(legend.position="none",
+          strip.text.y=element_blank(),
+          strip.text.x = element_text(family="mono", face="bold", size=15),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(0,"mm"), 
+          axis.text=element_text(size=14),
+          axis.title.x = element_text(size=12),
+          plot.title = element_text(hjust=0.5, size=18),
+          plot.margin = margin(2,2,2,2,"mm")) +
+    coord_cartesian(ylim=c(0,1)) +
+    ylab("Proportion of sites (per sample type)") +
+    xlab("Mean CV of Gibbs draws") +
+    labs(title="Sample Type"),
+  nrow=1, widths=c(1,3))
+
+egg::ggarrange(
+  ggplot(g0) + 
+    facet_wrap(vars(set), scales = "free_y", strip.position = "left", ncol=1) +
+    ggthemes::theme_clean(base_size = 18) + 
+    theme(strip.text.y=element_text(family="mono", face="bold", size=18),
+          strip.background = element_blank(),
+          strip.placement = "outside",
+          axis.text.x=element_text(size=13),
+          axis.title.x = element_text(size=12),
+          plot.margin = margin(2,2,2,2,"mm")) +
+    labs(x="ln(mean CV of Gibbs draws)", y="Number of ASVs") + coord_cartesian(expand=F) +
+    geom_density(aes(log(Soil), after_stat(count)), 
+                 color=colorblind[3], fill=colorblind[3], alpha=0.3, linewidth=1.8) +
+    geom_density(aes(log(Retreat), after_stat(count)), 
+                 color=colorblind[2], fill=colorblind[2], alpha=0.3, linewidth=1.8) +
+    geom_density(aes(log(Unknown), after_stat(count)), 
+                 color=colorblind[7], fill=colorblind[7], alpha=0.3, linewidth=1.8) ,
+  
+  ggplot(try6) + ggthemes::theme_few(base_size = 15, base_family = "sans") + 
+    facet_grid(set ~ sample_type, scales="free_y", ) +
+    geom_point(aes(log(mean_CV), site_proportion, color=source), alpha=0.6, pch=21) +
+    #stat_smooth(aes(log(mean_CV), site_proportion, color=source), method="lm") +
+    ggpmisc::stat_ma_line(aes(log(mean_CV), site_proportion, color=source), method="lmodel2:SMA") +
+    #scale_x_continuous(expand=c(0.15,0)) + #, limits=c(0,1), n.breaks=3) +
+    #scale_x_log10() +
+    scale_y_continuous(position="right") +
+    scale_color_manual(values=colorblind[c(2,3,7)]) +
+    theme(legend.position="none",
+          strip.text.y=element_blank(),
+          strip.text.x = element_text(family="mono", face="bold", size=15),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(0,"mm"), 
+          axis.text=element_text(size=14),
+          axis.title.x = element_text(size=12),
+          plot.title = element_text(hjust=0.5, size=18),
+          plot.margin = margin(2,2,2,2,"mm")) +
+    coord_cartesian(ylim=c(0,1)) +
+    ylab("Proportion of sites (per sample type)") +
+    xlab("ln(mean CV of Gibbs draws)") +
+    labs(title="Sample Type"),
+  nrow=1, widths=c(1,3))
+```
+
+```{r 02_SourceTracker_plots5, fig.height=5, fig.width=8}
+egg::ggarrange(
+  ggplot(reshape2::melt(g0)) + 
+    facet_wrap(vars(set), scales = "free_y", strip.position = "left", ncol=1) +
+    ggthemes::theme_clean(base_size = 18) + 
+    theme(strip.text.y=element_text(family="mono", face="bold", size=18),
+          strip.background = element_blank(),
+          strip.placement = "outside",
+          axis.text=element_text(color="grey30", size=14),
+          axis.title.x = element_text(size=12, hjust=-0.5),
+          plot.margin = margin(2,1,2,2,"mm")) +
+    labs(x="ln(mean CV of Gibbs draws)", y="Number of ASVs") + coord_cartesian(expand=F) +
+    geom_density(aes(log(value), after_stat(count), 
+                     color=forcats::fct_rev(variable), fill=forcats::fct_rev(variable)), 
+                 alpha=0.3, linewidth=1.8, show.legend = F) +
+    scale_color_manual(values=colorblind[c(7,3,2)]) +
+    scale_fill_manual(values=colorblind[c(7,3,2)]), 
+
+  
+  ggplot(subset(try6, subset=sample_type=="capture")) + 
+    ggthemes::theme_few(base_size = 15, base_family = "sans") + 
+    facet_grid(set ~ sample_type, scales="free_y", ) +
+    geom_point(aes(log(mean_CV), site_proportion, color=source), alpha=0.6, pch=21) +
+    ggpmisc::stat_ma_line(aes(log(mean_CV), site_proportion, color=source), method="lmodel2:SMA") +
+    scale_y_continuous(position="right") +
+    scale_color_manual(values=colorblind[c(2,3,7)]) +
+    theme(legend.position="none",
+          strip.text.y=element_blank(),
+          strip.text.x = element_text(family="mono", face="bold", size=15),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(0,"mm"), 
+          axis.text.x=element_text(size=14),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.title.y = element_blank(),
+          axis.title.x = element_blank(), 
+          plot.title = element_text(hjust=0.5, size=18),
+          plot.margin = margin(2,2,2,1,"mm")) +
+    coord_cartesian(ylim=c(0,1)) +
+    ylab("Proportion of sites (per sample type)") +
+    xlab("ln(mean CV of Gibbs draws)") +
+    labs(title="Sink samples"),
+  
+  ggplot(subset(try6, subset=sample_type!="capture")) + 
+    ggthemes::theme_few(base_size = 15, base_family = "sans") + 
+    facet_grid(set ~ sample_type, scales="free_y", ) +
+    geom_point(aes(log(mean_CV), site_proportion, color=source), alpha=0.6, pch=21) +
+    ggpmisc::stat_ma_line(aes(log(mean_CV), site_proportion, color=source), method="lmodel2:SMA") +
+    scale_y_continuous(position="right") +
+    scale_color_manual(values=colorblind[c(2,3,7)]) +
+    theme(legend.position="none",
+          strip.text.x= element_text(family="mono", face="bold", size=15),
+          strip.text.y=element_blank(),
+          strip.background = element_blank(),
+          panel.spacing.x = unit(0,"mm"), 
+          axis.text=element_text(size=14),
+          plot.title = element_text(hjust=0.5, size=18),
+          plot.margin = margin(2,2,2,4,"mm")) +
+    coord_cartesian(ylim=c(0,1)) +
+    ylab("Proportion of sites (per sample type)") +
+    xlab("ln(mean CV of Gibbs draws)") +
+    labs(title="Source samples"),
+  nrow=1, widths=c(1,1,2))
+
+
+```
+
+
+#### Figure S5
+
+##### Bacteria
+```{r 02_SourceTracker_FigureS5a, fig.height=11, fig.width=14}
+
+testB <- dendro.heatmap(commB[row.names(tmpmetaB),], taxB, tmpmetaB, unifracB$unifracs[,,"d_UW"],
+                       "data/bacteria/tree.nwk", "WebType", "label", 30, "tag.name")
+
+ggpubr::annotate_figure(testB$whole, top = ggpubr::text_grob("Bacteria: Top 30 (mean) - Dendrogram (UW UniFrac)",
+                                               face = "bold", size = 18))
+
+set_listB <- read.csv("coreplots/venn/bacteria/barplots/dataframe.csv") %>%
+  .[,c(5,7,8)] %>% group_by(tag, sec.list) %>% summarize_at(vars(value), .funs="median") %>%
+  .[order(.$value, decreasing=T),]
+
+core.listB <- set_listB$tag %>% unlist() %>% unique() %>% .[1:30] %>% na.omit()
+
+ggB1 <- dendro.heatmap(commB[row.names(tmpmetaB),], taxB, tmpmetaB, #unifracB$unifracs[,,"d_UW"],
+                        as.matrix(vegan::vegdist(commB[row.names(tmpmetaB),], binary = T)),
+                       "data/bacteria/tree.nwk", "WebType", "label", core.listB, "tag.name")
+
+#ggpubr::annotate_figure(ggB1$whole, top = ggpubr::text_grob("Bacteria: Venn Top 30 (median) - Dendrogram (binary Bray)",
+#                                               face = "bold", size = 18))
+
+
+ggB2 <- ggB1
+ggB2$heat.raster@data$name <- as.character(ggB2$heat.raster@data$name)
+
+ggB2$heat.raster@data <- left_join(ggB2$heat.raster@data, set_listB) %>%
+  left_join(tmpmetaB[,c("newlab","WebType")], by=c("id"="newlab")) %>% 
+  left_join(taxB[,c("tag","taxonomy")]) %>%
+  left_join(bact$CoefVar$CV[,c(1,5)], by=c("tag"="tag")) %>%
+  .[order(.$sec.list,  .$taxonomy, .$abund, decreasing = T),] %>%
+  mutate(source = factor(g.cv, labels=c("3","2")))
+ggB2$heat.raster@data$name <- factor(ggB2$heat.raster@data$name, unique(ggB2$heat.raster@data$name))
+ggB2$heat.raster@data$source <- as.numeric(as.character(ggB2$heat.raster@data$source))
+ggB2$heat.raster@data$source[is.na(ggB2$heat.raster@data$source)] <- 8
+ggB2$heat.raster@data <- mutate(ggB2$heat.raster@data, color=colorblind[source], label=name)
+ggB2$heat.raster@data$label[which(ggB2$heat.raster@data$WebType!="capture")] <- NA
+
+ggB2 <- ggB2$heat.raster+
+  facet_grid(sec.list~WebType,space="free",scales="free", switch="y") +
+  theme(panel.spacing = unit(1,"mm"),
+        strip.text.y.left = element_text(angle=0, size=14, face="bold"),
+        strip.text.x = element_text(angle=0, size=14, face="bold"),
+        axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        plot.margin = margin(1,11,1,1,"cm")) +
+  geom_text(aes(color=as.factor(source), label=label), size=4.5, x=Inf, hjust=0, show.legend = F, nudge_x=20) +
+  scale_color_manual(values=colorblind[c(2,3,7,8)]) +
+  coord_cartesian(clip="off")
+
+  
+ggB3 <- ggpubr::annotate_figure(ggB2, top = ggpubr::text_grob("Bacteria: Top 30 (median relative abundance) + SourceTracker assignments",
+                                               face = "bold", size = 18))
+
+pie_grob <- png::readPNG("figs/Bacteria_piechart.png", info=T) %>% grid::rasterGrob(interpolate =T)
+venn_grob <- png::readPNG("figs/Bacteria_venn.png") %>% grid::rasterGrob(interpolate =T)
+
+ggB3 + 
+  patchwork::inset_element(pie_grob, left = 0.84, bottom = 0.83, right = 0.98, top = 1) +
+  patchwork::inset_element(venn_grob, left = 0.02, bottom = 0.83, right = 0.16, top = 1)
+
+# st_listB <- bact$TopTaxa %>% .[order(.$gibbs.mean, decreasing=T),] %>% .$tag %>% unique()
+# 
+# ggB3 <- dendro.heatmap(commB[row.names(tmpmetaB),], taxB, tmpmetaB, #unifracB$unifracs[,,"d_UW"],
+#                         as.matrix(vegan::vegdist(commB[row.names(tmpmetaB),], binary = T)),
+#                        "data/bacteria/tree.nwk", "WebType", "label", st_listB, "tag.name")
+# 
+# ggB3$heat.raster@data$name <- as.character(ggB3$heat.raster@data$name)
+# ggB3$heat.raster@data <- left_join(ggB3$heat.raster@data, set_listB) %>%
+#   left_join(tmpmetaB[,c("newlab","WebType")], by=c("id"="newlab")) %>% 
+#   left_join(taxB[,c("tag","taxonomy")]) %>%
+#   left_join(bact$CoefVar$CV[,c(1,5)], by=c("tag"="tag")) %>%
+#   .[order(.$sec.list, .$taxonomy, .$abund),] %>%
+#   mutate(source = factor(g.cv, labels=c("3","2","7")))
+# ggB3$heat.raster@data$name <- factor(ggB3$heat.raster@data$name, unique(ggB3$heat.raster@data$name))
+# ggB3$heat.raster@data$source <- as.numeric(as.character(ggB3$heat.raster@data$source))
+# ggB3$heat.raster@data$source[is.na(ggB3$heat.raster@data$source)] <- 8
+# 
+# ggB3 <- ggB3$heat.raster+
+#   facet_grid(sec.list~WebType,space="free",scales="free") +
+#   theme(panel.spacing = unit(1,"mm"),
+#         strip.text.y = element_text(angle=0, size=14, face="bold"),
+#         strip.text.x = element_text(angle=0, size=14, face="bold"),
+#         axis.text.y = element_text(color=colorblind[unique(ggB3$heat.raster@data[,c(3,5,9,10)])$source])) 
+# 
+# ggpubr::annotate_figure(ggB3, top = ggpubr::text_grob("Bacteria: SourceTracker Top 10 (Gibbs mean) - with assignments",
+#                                                face = "bold", size = 18))
+```
+
+##### Fungi
+```{r 02_SourceTracker_FigureS5b, fig.height=11, fig.width=14}
+
+testF <- dendro.heatmap(commF[row.names(tmpmetaF),], taxF, tmpmetaF, unifracF$unifracs[,,"d_UW"],
+                       "data/fungi/treeFungi.nwk", "WebType", "label", 30, "tag.name")
+
+ggpubr::annotate_figure(testF$whole, top = ggpubr::text_grob("Fungi: Top 30 - Dendrogram (UW UniFrac)",
+                                               face = "bold", size = 18))
+
+set_listF <- read.csv("coreplots/venn/fungi/barplots/dataframe.csv") %>%
+  .[,c(5,7,8)] %>% group_by(tag, sec.list) %>% summarize_at(vars(value), .funs="median") %>%
+  .[order(.$value, decreasing=T),]
+
+core.listF <- set_listF$tag %>% unlist() %>% unique() %>% .[1:30] %>% na.omit()
+
+ggF <- dendro.heatmap(commF[row.names(tmpmetaF),], taxF, tmpmetaF,# unifracF$unifracs[,,"d_UW"],
+                      as.matrix(vegan::vegdist(commF[row.names(tmpmetaF),], binary = T)),
+                       "data/fungi/treeFungi.nwk", "WebType", "label", core.listF, "tag.name")
+
+#ggpubr::annotate_figure(ggF$whole, top = ggpubr::text_grob("Fungi: SourceTracker - Dendrogram (binary Bray)",
+#                                               face = "bold", size = 18))
+
+ggF$heat.raster@data$name <- as.character(ggF$heat.raster@data$name)
+
+ggF$heat.raster@data <- left_join(ggF$heat.raster@data, set_listF) %>%
+  left_join(tmpmetaF[,c("newlab","WebType")], by=c("id"="newlab")) %>% 
+  left_join(taxF[,c("tag","taxonomy")]) %>%
+  left_join(fung$CoefVar$CV[,c(1,5)], by=c("tag"="tag")) %>%
+  .[order(.$sec.list,  .$taxonomy, .$abund, decreasing = T),] %>%
+  mutate(source = factor(g.cv, labels=c("3","2","7")))
+ggF$heat.raster@data$name <- factor(ggF$heat.raster@data$name, unique(ggF$heat.raster@data$name))
+ggF$heat.raster@data$source <- as.numeric(as.character(ggF$heat.raster@data$source))
+ggF$heat.raster@data$source[is.na(ggF$heat.raster@data$source)] <- 8
+ggF$heat.raster@data <- mutate(ggF$heat.raster@data, color=colorblind[source], label=name)
+ggF$heat.raster@data$label[which(ggF$heat.raster@data$WebType!="capture")] <- NA
+
+ggF2 <- ggF$heat.raster+
+  facet_grid(sec.list~WebType,space="free",scales="free", switch="y") +
+  theme(panel.spacing = unit(1,"mm"),
+        strip.text.y.left = element_text(angle=0, size=14, face="bold"),
+        strip.text.x = element_text(angle=0, size=14, face="bold"),
+        axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        plot.margin = margin(1,6,1,1,"cm")) +
+  geom_text(aes(color=as.factor(source), label=label), size=4.5, x=Inf, hjust=0, show.legend = F, nudge_x=20) +
+  scale_color_manual(values=colorblind[c(2,3,7,8)]) +
+  coord_cartesian(clip="off")
+  
+
+ggF3 <- ggpubr::annotate_figure(ggF2, top = ggpubr::text_grob("Fungi: Top 30 (median relative abundance) + SourceTracker assignments",
+                                               face = "bold", size = 18))
+
+pie_grob <- png::readPNG("figs/Fungi_piechart.png", info=T) %>% grid::rasterGrob(interpolate =T)
+venn_grob <- png::readPNG("figs/Fungi_venn.png") %>% grid::rasterGrob(interpolate =T)
+
+ggF3 + 
+  patchwork::inset_element(pie_grob, left = 0.84, bottom = 0.83, right = 0.98, top = 1) +
+  patchwork::inset_element(venn_grob, left = 0.02, bottom = 0.83, right = 0.16, top = 1)
+```
+
 
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
 
@@ -1067,17 +1839,17 @@ egg::ggarrange(
 
 **Group-wise similarity:** We then grouped compositional distances by relationship: between samples collected from the same location (Within-colony), between samples of the same transect (Within-transect), and between samples across transects (Between-transect). The mean compositional distances for each group were compared using two-way ANOVA.
 
-```{r 03_SampleType_CrossComparison, eval=F}
+```{r 03_SampleType_CrossComparison, eval=T}
 CrossComp <- function(pc, meta){
   # subset community matrix to each sample type and format row names to match 
   capture <- pc[grep("capture",row.names(pc)),] %>% 
     .[order(row.names(.)),] %>% 
     `row.names<-`(stringr::str_sub(row.names(.), 1, -8)) #(removes sampletype identifiers)
   retreat <- pc[grep("retreat",row.names(pc)),] %>% 
-    .[order(row.names(.)),] %>%
+    .[order(row.names(.)),] %>% 
     `row.names<-`(stringr::str_sub(row.names(.), 1, -8))
   soil <- pc[grep("soil",row.names(pc)),] %>% 
-    .[order(row.names(.)),] %>%
+    .[order(row.names(.)),] %>% 
     `row.names<-`(stringr::str_sub(row.names(.), 1, -5))
   
   # formats the dataframes together. Row names must match
@@ -1109,9 +1881,9 @@ CrossComp <- function(pc, meta){
   m3 <- lm(cross ~ dist, data=df3); summary(m3)
   
   # bind the results from df1-3 together and join additional metadata
-  df <- rbind(data.frame(df1, nestedness="Capture\u2286Retreat"),
-              data.frame(df2, nestedness="Capture\u2286Soil"),
-              data.frame(df3, nestedness="Retreat\u2286Soil")) %>%
+  df <- rbind(data.frame(df1, nestedness="Capture x Retreat"),
+              data.frame(df2, nestedness="Capture x Soil"),
+              data.frame(df3, nestedness="Retreat x Soil")) %>%
     left_join(meta[,c("SampleID","column_name","SiteID","WebType","country")], by=c("Var1"="SampleID")) %>%
     left_join(meta[,c("SampleID","column_name","SiteID","WebType","country")], by=c("Var2"="SampleID"))
   
@@ -1146,19 +1918,19 @@ CrossComp <- function(pc, meta){
   
   ## statistical analysis to go with group comparison
   av1 <- aov(cross ~ with.between, 
-             data=subset(df, subset=nestedness=="Capture\u2286Retreat")) %>%
+             data=subset(df, subset=nestedness=="Capture x Retreat")) %>%
     TukeyHSD() %>% .$with.between %>% as.data.frame() %>% 
-    tibble::rownames_to_column() %>% cbind(nestedness="Capture\u2286Retreat")
+    tibble::rownames_to_column() %>% cbind(nestedness="Capture x Retreat")
   
   av2 <- aov(cross ~ with.between, 
-             data=subset(df, subset=nestedness=="Capture\u2286Soil")) %>% 
+             data=subset(df, subset=nestedness=="Capture x Soil")) %>% 
     TukeyHSD() %>% .$with.between %>% as.data.frame() %>% 
-    tibble::rownames_to_column() %>% cbind(nestedness="Capture\u2286Soil")
+    tibble::rownames_to_column() %>% cbind(nestedness="Capture x Soil")
   
   av3 <- aov(cross ~ with.between, 
-             data=subset(df, subset=nestedness=="Retreat\u2286Soil")) %>% 
+             data=subset(df, subset=nestedness=="Retreat x Soil")) %>% 
     TukeyHSD() %>% .$with.between %>% as.data.frame() %>% 
-    tibble::rownames_to_column() %>% cbind(nestedness="Retreat\u2286Soil")
+    tibble::rownames_to_column() %>% cbind(nestedness="Retreat x Soil")
   
   ## formatting of significance bars to go with group comparison
   sigdf <- rbind(av1,av2,av3)
@@ -1252,27 +2024,38 @@ load("output/crosscomparison_both.RD")
 df <- rbind(data.frame(ccbact$dist.dat, set="Bacteria"),
             data.frame(ccfung$dist.dat, set="Fungi"))
 
-ggplot(df) + ylim(0,0.7) +
-  facet_grid(nestedness ~ set, switch="y") +
+lab <- df %>% group_by(set, nestedness, with.between) %>%
+  summarize_at(vars(cross), .funs=max) %>%
+  data.frame(., sig=c("b","ab","a","ab","b","a","ns","ns","ns",
+                      "c","b","a","b","b","a","b","b","a"))
+lab$cross <- lab$cross + 0.02
+lab$cross[lab$sig=="ns"] <- 0.7
+lab$with.between[lab$sig=="ns"] <- "Within\ncolony"
+
+ggplot(df) + ylim(0.03,0.76) +
+  facet_grid(nestedness ~ set) +
   geom_boxplot(aes(forcats::fct_rev(with.between), cross, fill=nestedness, alpha=with.between), 
                show.legend = c("fill"=F)) +
-  scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+  geom_text(data=lab, aes(forcats::fct_rev(with.between), cross, label=sig), size=5, vjust=0) +
+  scale_fill_manual(values=colorblind[4:6]) +
   scale_alpha_manual(values=c(0.2,0.6,1)) +  
-  theme_bw(base_size=14) + 
+  theme_bw(base_size=16) + 
   theme(axis.text.x = element_blank(), 
         axis.ticks.x = element_blank(), 
         axis.title.x = element_blank(), 
+        axis.title.y = element_text(face="bold", family="mono", size=14),
         legend.position = "bottom",
         legend.justification = "right",
         legend.title.position = "bottom",
         legend.key.spacing = unit(4,"mm"),
         legend.margin = margin(-0.5,0,0.5,0,"lines"),
-        legend.text = element_text(margin = margin(l = 1)),
+        legend.text = element_text(margin = margin(l = 1), size=10),
         legend.title = element_text(hjust=0.5, face="bold", family="mono", size=12),
-        strip.text = element_text(hjust=0.5, face="bold", family="mono", size=14),
-        plot.title = element_text(hjust=0.5, face="bold", family="mono", size=20),
+        strip.text.x = element_text(hjust=0.5, face="bold", family="mono", size=16),
+        strip.text.y = element_text(hjust=0.5, face="bold", family="mono", size=14),
+        strip.background = element_blank(), strip.clip="off",
         plot.margin=unit(c(0.5,0.5,0,0.5), "lines")) +
-  coord_cartesian(clip=F) +
+  coord_cartesian(clip="off") +
   guides(alpha=guide_legend(reverse = T, keywidth = unit(1, "cm"), byrow=T,
                          title="Pairwise sample comparison",
                          override.aes = list(fill=c("grey20","grey55","grey90"), alpha=1))) +  labs(y="Compositional similarity")
@@ -1289,7 +2072,7 @@ egg::ggarrange(
     facet_wrap(vars(nestedness), dir="v") +
     geom_boxplot(aes(cross, with.between, fill=nestedness, alpha=with.between), 
                  show.legend = F) +
-    scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+    scale_fill_manual(values=colorblind[4:6]) +
     scale_alpha_manual(values=c(0,0.5,1)) +  
     theme_bw(base_size=14) + 
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
@@ -1302,7 +2085,7 @@ egg::ggarrange(
     facet_wrap(vars(nestedness), dir="v") +
     geom_boxplot(aes(cross, with.between, fill=nestedness, alpha=with.between), 
                  show.legend = c(fill=F)) +
-    scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+    scale_fill_manual(values=colorblind[4:6]) +
     scale_alpha_manual(values=c(0,0.5,1)) +  
     theme_bw(base_size=14) + 
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
@@ -1320,8 +2103,8 @@ egg::ggarrange(
 
 ```
 
-#### Figure S5
-```{r 03_CrossCompar_FigureS5, fig.width=14, fig.height=8}
+#### Figure S6
+```{r 03_CrossCompar_FigureS6, fig.width=14, fig.height=8}
 
 df$with.between <- gsub("\n"," ",df$with.between)
 df$with.between <- factor(df$with.between, levels=rev(unique(df$with.between)))
@@ -1336,7 +2119,7 @@ g3 <- ggplot(df) +
                show.legend = c(fill=F)) +
   geom_segment(data=sigdf, aes(x=bars, xend=bars, y=y, yend=yend), size=0.75) +
   geom_text(data=sigdf, aes(x=cross+0.06, y=star, label="*"), size=10, vjust=0.8) +
-  scale_fill_manual(values=c("#035b5b","#88510b","#b80565")) +
+  scale_fill_manual(values=colorblind[4:6]) +
   scale_alpha_manual(values=c(0,0.5,1)) +  
   scale_x_continuous(n.breaks = 3,
                      limits=round(seq(0,max(df$cross)+0.1, length=2),1)) +
@@ -1359,14 +2142,15 @@ g2 <- ggplot(df, aes(dist*111.11, cross, linetype=transect.wb)) +
   facet_grid(nestedness ~ set) +
   geom_point(aes(shape=compare, color=nestedness), show.legend = c(color=F)) +
   stat_smooth(method="lm", formula='y~x', color="black", fullrange=T)+
+
   ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = "left", label.y="bottom", 
                         vstep=0.7, hstep=0.9, vjust=-1, size=2.5,
                         aes(label=paste("bold(\"",c("Within","Between")[stat(linetype)], 
                                      "\ntransect:  \")*", after_stat(eq.label), sep = ""))) +
   ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = "left", label.y="bottom", 
-                        vstep=0.7, hstep=0.9, vjust= 0, size=2.5,
+                        vjust= 0, size=2.5, vstep=0.7, hstep=0.9, 
                       aes(label=after_stat(rr.label))) +
-  scale_color_manual(values=c("#035b5b","#88510b","#b80565")) +
+  scale_color_manual(values=colorblind[4:6]) +
   scale_shape_manual(values=c(17,15,20)) +
   guides(linetype=guide_legend(title=NULL, direction="horizontal", 
                                label.theme=element_text(margin=margin(0,7,0,0), size=9),
@@ -1383,6 +2167,54 @@ g2 <- ggplot(df, aes(dist*111.11, cross, linetype=transect.wb)) +
 
 
 egg::ggarrange(g3, g0, g1, g2, nrow=1, widths=c(2,1,1,2))
+```
+
+```{r}
+## from feng et al 2019; slope is z (turnover rate)
+
+ztab <- data.frame()
+for (s in unique(df$set)){
+  for (cc in unique(df$nestedness)){
+    tmp <- subset(df, subset=nestedness==cc&set==s)
+    zm <- lm(log10(cross) ~ I(-2*log10(dist*111111+1)), tmp) %>%
+      summary()
+    out <- c(s, cc, round(zm[[4]][2],5), signif(zm[[4]][8],3))
+    ztab <- rbind(ztab, out)
+  }
+}
+
+names(ztab) <- c("set","nestedness","z","p-val")
+
+ztab
+
+g4 <- ggplot(df, aes(dist*111111+1, cross))+#, linetype=transect.wb)) + 
+  facet_grid(nestedness ~ set) +
+  geom_point(aes(shape=compare, color=nestedness), show.legend = c(color=F)) +
+  stat_smooth(method="lm", formula='y~I(-2*x+1)', color="black", fullrange=T)+
+  geom_text(data=ztab, aes(x=3, y=0, 
+                           label=paste0("z=",z,"\np=",`p-val`)),
+            vjust=-0.2, hjust=0, size=2.5) +
+  scale_x_log10() + scale_y_log10() +
+  scale_color_manual(values=colorblind[4:6]) +
+  scale_shape_manual(values=c(17,15,20)) +
+  guides(linetype=guide_legend(title=NULL, direction="horizontal", 
+                               label.theme=element_text(margin=margin(0,7,0,0), size=9),
+                               reverse = F, keywidth = unit(1, "cm")),
+         shape=guide_legend(title=NULL, direction="horizontal", ncol=2, byrow = T,
+                            override.aes = list(size=3),
+                            label.theme=element_text(margin=margin(0,7,0,0), size=9))) +
+  theme_bw(base_size = 14) + 
+  theme(plot.margin=unit(c(1.5,0.5,0,0.5), "lines"),
+        legend.box="vertical",
+        legend.spacing.x = unit(3, "lines"), legend.spacing.y = unit(-0.25, "lines"),
+        legend.position = "bottom", legend.justification = c(0.75,-1),
+        legend.margin = margin(-0.5,0,0.5,0,"lines"),
+        legend.text = element_text(margin = margin(l = 1), size=10),
+        legend.title = element_text(hjust=0.5, face="bold", family="mono", size=12),
+        strip.text.x = element_text(hjust=0.5, face="bold", family="mono", size=16),
+        strip.text.y = element_text(hjust=0.5, face="bold", family="mono", size=14),
+        strip.background = element_blank(), strip.clip="off",) +
+  xlab("Distance between colonies (m)") + ylab("Compositional similarity")
 ```
 
 <a href="#data-analysis" style="color:steelblue;" >Back to top</a>
@@ -1679,7 +2511,7 @@ testmsrF ## not sufficiently correlated with each other -> include both
 ```
 
 #### CCA
-```{r 04_Processes_CCA, eval=F}
+```{r 04_Processes_CCA, eval=T}
 partitioning <- function(sa, gm){
   bysamp <- function(sampletype, col){
     
@@ -1739,7 +2571,7 @@ partitioning <- function(sa, gm){
     return(out)
   }
   
-  colors <- data.frame(retreat="#377EB8", capture="#4DAF4A", soil="#E41A1C")
+  colors <- data.frame(retreat=colorblind[2], capture=colorblind[1], soil=colorblind[3])
   
   outlist <- list()
   for (i in c("retreat","capture","soil")){
@@ -1851,7 +2683,7 @@ g5 <- ggplot(sample_dist, aes(envgrad, cross)) +
     geom_label(data=t1, aes(envgrad, cross, 
                          label = paste("R^2==",round(X1.1,2))), 
             parse = TRUE, hjust=0, vjust=1) + 
-  scale_color_manual(values=c("#377EB8","#4DAF4A","#E41A1C")) +
+  scale_color_manual(values=colorblind[c(2,1,3)]) +
   theme_bw() + theme(plot.margin=unit(c(1.5,0.5,0,0.5), "lines"), 
                      legend.spacing.x = unit(5, "lines"), 
                      legend.text=element_text(margin=margin(0,7,0,0)),
@@ -1883,7 +2715,7 @@ g6 <- ggplot(sample_dist, aes(dist, cross)) +
   geom_label(data=t1, aes(dist, cross, 
                          label = paste("R^2==",round(X1,2))), 
             parse = TRUE, hjust=0, vjust=1) + 
-  scale_color_manual(values=c("#377EB8","#4DAF4A","#E41A1C")) +
+  scale_color_manual(values=colorblind[c(2,1,3)]) +
   scale_shape_manual(values=c(17,20, 15)) +
   guides(shape=guide_legend(title=NULL, direction="horizontal",
                             byrow = T,override.aes = list(size=3), 
