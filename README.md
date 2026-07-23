@@ -1,7 +1,7 @@
 <!-- PROJECT LOGO -->
 
 <p align="center">
-  <a href="https://github.com/kjmtaylor22/stegodyve"> <img src="images/stegodyve_logo.bmp" alt="Logo" width="200" height="150"/> </a>
+  <a href="https://github.com/kjmtaylor22/stegodyve"> <img src="images/stegodyve_logo.bmp" alt="Logo" width="400" height="300"/> </a>
 </p>
 
 <!-- ABOUT THE PROJECT -->
