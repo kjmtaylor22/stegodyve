@@ -332,7 +332,7 @@ egg::ggarrange(
   nrow=1)
 ```
 
-```{r 00_gradient_Figure1Av2, fig.width=16.5, fig.height=4.5}
+```{r 00_gradient_Figure1Av2, fig.width=16.5, fig.height=4.5, dpi=500}
 
 regdf <- rbind(nam[,c(2,3,4,5)] %>% `colnames<-`(c("country","Temp","AridIndex","transect_deg")),
                saf[,c(2,3,4,6)] %>% `colnames<-`(c("country","Temp","AridIndex","transect_deg")) %>%
@@ -361,15 +361,15 @@ saf <- saf %>% mutate(AI_scale=tf[1]+AridIndex*tf[2]) %>%
 
 
 egg::ggarrange(
-  ggplot(nam, aes(x=-latitude, y=value, color=variable, fill=variable, alpha=value)) + theme_bw() + 
+  ggplot(nam, aes(x=-latitude, y=value, color=variable, fill=variable)) + theme_bw() + 
     labs(title="Similar change in environmental gradient with space for both transects", 
          subtitle="Namibia transect (North-South)") +
     stat_smooth(method="lm", fullrange = T, fill="grey40") +
     geom_segment(aes(yend=lab_y)) +
-    geom_point(shape=24, size=5, color="white", fill="white", alpha=1) +
+    #geom_point(shape=24, size=5, color="white", fill="white", alpha=1) +
     geom_point(shape=24, size=5, color="#042245") +
-    geom_label(aes(y=lab_y, label=label), color="#042245", fill="white", alpha=1, fontface="bold", size=4, 
-               label.size=0, label.padding=unit(0.05, "lines")) +
+    geom_text(aes(y=lab_y, label=label), color="#042245", fill="white", alpha=1, fontface="bold", size=6, 
+               label.size=0, label.padding=unit(0.05, "lines"), angle=-90, check_overlap = T) +
 #    geom_text(data=namEq[1,], inherit.aes=F, size=6, parse=T,
 #              aes(x=x, y=y, vjust=vjust, color=variable,
 #                              label=list(bquote("y="~.(b0)~"+"~.(b1)~"x, "~R^2==.(R2))))) +
@@ -381,15 +381,18 @@ egg::ggarrange(
           axis.ticks.y.right=element_blank(),
           axis.text.y.left=element_text(color="#008e73"),
           axis.title.y.left=element_text(color="#008e73"),
-          axis.text=element_text(size=22),
-          axis.title=element_text(size=20),
+          axis.text=element_text(size=20),
+          axis.text.x=element_text(color="black"),
+          axis.title=element_text(size=22),
+          axis.ticks=element_line(linewidth=1),
           legend.position = "none",
-          plot.title = element_text(size=20, face="bold"),
-          plot.subtitle = element_text(size=16),
+          panel.border = element_rect(linewidth=1),
+          plot.title = element_text(size=22, face="bold"),
+          plot.subtitle = element_text(size=20),
           plot.margin = unit(c(1,0,1,1), "lines")) +
     scale_color_manual(values=c("#693908","#008e73")) +
     scale_fill_manual(values=c("#a6611a","#5eb3a3")) +
-    scale_alpha_continuous(range=c(0.3,1)) +
+    #scale_alpha_continuous(range=c(0.3,1)) +
     scale_y_continuous(position="right", 
                        sec.axis = sec_axis(trans= ~ (.-tf[1])/tf[2], 
                                            name="Aridity Index", 
@@ -397,14 +400,14 @@ egg::ggarrange(
                                            labels=round(seq((18-tf[1])/tf[2],(21-tf[1])/tf[2],length=4),3))) +
     xlab("Latitude (degrees)") + xlim(-21,-25) +
     coord_cartesian(ylim=c(18,21)),
-  ggplot(saf, aes(x=longitude, y=value, color=variable, fill=variable, alpha=value)) + theme_bw() + 
+  ggplot(saf, aes(x=longitude, y=value, color=variable, fill=variable)) + theme_bw() + 
     labs(subtitle="South Africa transect (East-West)") + 
     stat_smooth(method="lm", fullrange = T, fill="grey40") +
     geom_segment(aes(yend=lab_y)) +
-    geom_point(shape=21, size=5, color="white", fill="white", alpha=1) +
+    #geom_point(shape=21, size=5, color="white", fill="white", alpha=1) +
     geom_point(shape=21, size=5, color="#042245") +
-    geom_label(aes(y=lab_y, label=label), color="#042245", fill="white", alpha=1, fontface="bold", size=4, 
-               label.size=0, label.padding=unit(0.05, "lines")) +
+    geom_text(aes(y=lab_y, label=label), color="#042245", fill="white", alpha=1, fontface="bold", size=6, 
+               label.size=0, label.padding=unit(0.05, "lines"), angle=-90, check_overlap=T) +
 #    geom_text(data=safEq[1,], inherit.aes=F, size=6, parse=T,
 #              aes(x=x, y=y, vjust=vjust, color=variable,
 #                              label=list(bquote("y="~.(b0)~"+"~.(b1)~"x, "~R^2==.(R2))))) +
@@ -416,15 +419,18 @@ egg::ggarrange(
           axis.text.y.left=element_blank(),
           axis.title.y.left=element_blank(),
           axis.ticks.y.left=element_blank(),
-          axis.text=element_text(size=22),
-          axis.title=element_text(size=20),
+          axis.text=element_text(size=20),
+          axis.text.x=element_text(color="black"),
+          axis.title=element_text(size=22),
+          axis.ticks=element_line(linewidth=1),
           legend.position = "none",
-          plot.subtitle = element_text(size=16),
+          panel.border = element_rect(linewidth=1),
+          plot.subtitle = element_text(size=20),
           plot.margin = unit(c(1,1,1,0), "lines")) +
     xlab("Longitude (degrees)") + xlim(25,21) +
     scale_color_manual(values=c("#693908","#008e73")) +
     scale_fill_manual(values=c("#a6611a","#5eb3a3")) +
-    scale_alpha_continuous(range=c(0.3,1)) +
+    #scale_alpha_continuous(range=c(0.3,1)) +
     scale_y_continuous(name="Temperature (°C)", position="right") +
     coord_cartesian(ylim=c(18,21)),
   nrow=1)
@@ -432,7 +438,7 @@ egg::ggarrange(
 
 ```
 
-```{r 00_gradient_Figure1Av1, fig.width=16.5, fig.height=4.5}
+```{r 00_gradient_Figure1Av1, fig.width=16.5, fig.height=4.5, eval=F}
 northernmost <- set$column_name[set$label=="N-1"]
 easternmost <- set$column_name[set$label=="SA-11"]
 
@@ -814,7 +820,7 @@ sigline[c(2,6),9] <- sigline[c(2,6),9] - 0.05
 
 ```
 
-```{r 01_SampleComposition_fig2, fig.width=9, fig.height=4.5, echo=F, eval=F}
+```{r 01_SampleComposition_fig2, fig.width=7, fig.height=3.5, echo=F, eval=F, dpi=500}
 egg::ggarrange(
   
   ggplot(al, aes(group.id, Richness, fill=group.id)) +
@@ -909,7 +915,7 @@ egg::ggarrange(
 
 ```
 
-```{r 01_SampleComposition_fig2_alt, fig.width=9, fig.height=4.5}
+```{r 01_SampleComposition_fig2_alt, fig.width=9, fig.height=4.5, dpi=500}
 egg::ggarrange(
   
   cowplot::plot_grid(
@@ -941,6 +947,8 @@ egg::ggarrange(
           plot.title = element_text(size=12, face="bold", family="mono",hjust = 1),
           strip.text = element_blank(),
           plot.margin = margin(5,10,1,0),
+          axis.ticks=element_line(linewidth=1),
+          axis.text.y=element_text(color="black"),
           axis.text.x = element_text(color=colorblind[c(3,2,1)], 
                                      angle=90, hjust=1, vjust=0.5)),
   
@@ -958,8 +966,10 @@ egg::ggarrange(
     labs(title="Diversity", x=NULL) + guides(fill="none") +
     ggthemes::theme_few(base_size = 12) +
     theme(strip.text=element_blank(), 
-          #axis.ticks.x = element_blank(),
+          panel.border=element_rect(linewidth=1),
+          axis.ticks = element_line(linewidth=1),
           axis.title.x = element_blank(),
+          axis.text.y=element_text(color="black"),
           axis.text.x = element_text(color=colorblind[3:1], 
                                      angle=90, hjust=1, vjust=0.5),
           plot.title = element_text(size=12, face="bold", family="mono", hjust=0.5)),
@@ -978,8 +988,10 @@ egg::ggarrange(
     labs(title="Variability", x=NULL, y="Distance to centroid") + guides(fill="none") +
     ggthemes::theme_few(base_size = 12) +
     theme(strip.text=element_blank(),
-          #axis.ticks.x = element_blank(),
+          panel.border=element_rect(linewidth=1),
+          axis.ticks.x = element_line(linewidth=1),
           axis.title.x = element_blank(),
+          axis.text.y = element_text(color="black"),
           axis.text.x = element_text(color=colorblind[3:1], 
                                      angle=90, hjust=1, vjust=0.5),
           plot.title = element_text(size=12, face="bold", family="mono", hjust=0.5)),
@@ -995,7 +1007,7 @@ egg::ggarrange(
     geom_polygon(data=hull, aes(PCoA1, PCoA2), alpha=0.7, fill=NA) +
     geom_text(data=sigline, aes(x=lab.x, y=lab.y, label=star), 
                              size=7, color="black", vjust=0.7) +
-    geom_text(data=ve, hjust=1, size=2.5,
+    geom_text(data=ve, hjust=1, size=2.5, color="black",
               aes(0.45, 0.4, label=paste0("PCoA1: ",round(as.numeric(PCoA1)*100,1),"%\n",
                                      "PCoA2: ",round(as.numeric(PCoA2)*100,1),"%"))) +
     scale_color_manual(values=colorblind[1:3]) +
@@ -1003,6 +1015,9 @@ egg::ggarrange(
     guides(color="none") +
     ggthemes::theme_few(base_size = 12) +
     theme(strip.text=element_blank(),
+          panel.border=element_rect(linewidth=1),
+          axis.ticks=element_line(linewidth=1),
+          axis.text=element_text(color="black"),
           plot.title = element_text(size=12, face="bold", family="mono", hjust=0.5)),
   
   nrow=1, widths=c(2,0.5,1,1,2), labels=c(" A"," ","    B","   C","      D"),
@@ -1511,9 +1526,9 @@ partitioning <- function(sa, gm){
     
     plotVenn <- draw.pairwise.venn(fracts$sets[1], fracts$sets[2],fracts$sets[3], 
                                    fracts$labels[1:2], 
-                                   fontfamily="sans", cex=c(0.9,0.9,0.9),
+                                   fontfamily="sans", cex=c(0.9, 0.9, 0.9),
                                    col=col, fill=col, alpha=0.3, 
-                                   cat.fontfamily="sans", cat.cex=c(0.7,0.7),
+                                   cat.fontfamily="sans", cat.cex=c(1,1),
                                    cat.default.pos = "text", 
                                    cat.just = list(c(0.3,0.6),c(0.5,0.6)))
     
@@ -1627,19 +1642,130 @@ sample_dist <- rbind(data.frame(sa_bact$df, set="Bacteria"),
 
 t1 <- openxlsx::read.xlsx("coreplots/structure/bacteria.xlsx", 2)
 t1 <- data.frame(nestedness=c("Retreat","Capture","Soil"),
-                 cross=-Inf, envgrad=Inf, dist=Inf,
+                 cross=Inf, envgrad=-Inf, dist=Inf,
                  r.sqD=t(t1[1,c(2,4,6)]), r.sqE=t(t1[1,c(3,5,7)]))
 
 t2 <- openxlsx::read.xlsx("coreplots/structure/fungi.xlsx", 2)
 t2 <- data.frame(nestedness=c("Retreat","Capture","Soil"),
-                 cross=Inf, envgrad=-Inf, dist=-Inf,
+                 cross=Inf, envgrad=-Inf, dist=Inf,
                  r.sqD=t(t2[1,c(2,4,6)]), r.sqE=t(t2[1,c(3,5,7)]))
 
 t3 <- rbind(data.frame(t1, set="Bacteria"),
             data.frame(t2, set="Fungi"))
 ```
 
-```{r 02_Processes_DistDecay, fig.width=5.5, fig.height=9}
+```{r 02_Processes_RegressionEnv}
+## environment gradient plots
+g5 <- ggplot(sample_dist, aes(envgrad, cross)) + 
+  facet_grid(nestedness~set) + 
+  geom_point(aes(shape=compare, color=nestedness), show.legend = c(color=F)) +
+  scale_shape_manual(values=c(17,20, 15)) +
+  stat_smooth(aes(linetype=transect.wb), 
+              method="lm", formula='y~x', color="black")+
+  ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = "left",
+                        label.y="bottom", #vjust=-0.8, vstep=-0.1,
+                        aes(linetype=transect.wb,
+                            vjust=after_stat(c(-1,1)[stat(linetype)]),
+                            label=paste(#"bold(\"",
+                                        #c("Within","Between"
+                                        #  )[stat(linetype)],
+                                        #" transect: \")*",
+                                        "\"", c("Within", "Between"
+                                                )[stat(linetype)], 
+                                        " transect:\" * ",
+                                        after_stat(eq.label), 
+                                        sep = "")), size=4) +
+  geom_label(data=t3, aes(envgrad, cross, 
+                          label = paste("R^2==",round(X1.1,2))), 
+             parse = TRUE, hjust=0, vjust=1) + 
+  scale_color_manual(values=colorblind[c(2,1,3)]) +
+  scale_linetype_manual(values=c("solid","41")) +
+  theme_bw(base_size = 12) + 
+  theme(plot.margin=unit(c(0.5,0.5,0,0.5), "lines"),
+        panel.border=element_rect(linewidth=1),
+        axis.ticks=element_line(linewidth=1),
+        axis.text=element_text(size=12, color="black"),
+        axis.title=element_text(size=14, color="black"),
+        legend.spacing = unit(2, "lines"),
+        legend.key.spacing = unit(1, "lines"),
+        legend.text=element_text(margin=margin(0,0,0,3), size=12),
+        legend.justification = "left", legend.position="bottom",
+        legend.box="horizontal", legend.box.spacing = unit(0.2,"lines"),
+        legend.box.margin = margin(0,1,0,1,"lines"),
+        strip.background = element_blank(),
+        strip.text.x=element_text(size=18, face="bold", family="mono"),
+        strip.text.y=element_text(size=16, face="bold", family="mono")) +
+  guides(shape=guide_legend(title=NULL, direction="vertical", byrow = F,
+                            ncol=2, override.aes = list(size=3)),
+         linetype=guide_legend(title=NULL, direction="vertical", order=1,
+                               reverse = F, keywidth = unit(1, "cm"))) +
+  xlab("Environmental dissimilarity\n(Temp:AridIndex)") + ylab("Compositional similarity") + 
+  coord_cartesian(ylim=c(-0.1,1))
+
+
+#egg::ggarrange(g5,g6,nrow=1)
+
+```
+
+```{r, fig.width=7.5, fig.height=9, dpi=500, out.width="13cm"}
+
+vennplot <- function(venn){
+  vp <- ggdraw() + draw_plot(as_grob(venn)) +
+    draw_plot(as_grob(venn$plot)) + ## panel B bottom
+    draw_plot_label(paste("R^2 ==", sum(venn$fracts$fracts[-4])),0.45,0.3, 
+                  fontface="plain", size=11, parse=T)
+  return(vp)
+}
+
+annotation_custom2 <- function (grob, xmin = 1.8, xmax = 4.2, ymin = 0.5, ymax = Inf, data){
+  layer(data = data, stat = StatIdentity, position = PositionIdentity, 
+        geom = ggplot2:::GeomCustomAnn,
+        inherit.aes = TRUE, params = list(grob = grob, 
+                                          xmin = xmin, xmax = xmax, 
+                                          ymin = ymin, ymax = ymax))
+}
+
+img.list <- list(vennplot(vp_bact$capture),
+                 vennplot(vp_bact$retreat),
+                 vennplot(vp_bact$soil),
+                 vennplot(vp_fung$capture),
+                 vennplot(vp_fung$retreat),
+                 vennplot(vp_fung$soil))
+
+g5
+# Get the current viewport tree
+a <- current.vpTree()
+b <- names(a$children$layout$children)
+panel.vp <- b[stringr::str_detect(b, "panel-")]
+# set up a viewport for my image; always top left
+vp.img <- grid::viewport(x=unit(0.55,"npc"), y=unit(0.8,"npc"), 
+                         width=unit(0.5, "npc"), height=unit(0.55,"npc"), just = "right")
+# add the images to each facet
+add <- list()
+for(i in 1:6){
+  # checkout viewport for panel i
+  grid::seekViewport(panel.vp[i])
+  # draw my image
+  #grid::grid.draw(grid::grobTree(as_grob(img.list[[i]]), vp=vp.img))
+  #my_box <- roundrectGrob(gp = gpar(fill = NA, col = "black", lwd = 0.8))
+  add[[i]] <- grid::grobTree(as_grob(img.list[[i]]), vp=vp.img)
+}
+
+g10 <- g5 + labs(tag="A") + 
+  theme(plot.tag=element_text(size = 26, face = "bold"),
+        plot.tag.position = c(0.02, 0.99)) +
+  annotation_custom2(add[[1]], data=data.frame(set="Bacteria",nestedness="Capture", envgrad=0, cross=0)) +
+  annotation_custom2(add[[2]], data=data.frame(set="Bacteria",nestedness="Retreat", envgrad=0, cross=0)) +
+  annotation_custom2(add[[3]], data=data.frame(set="Bacteria",nestedness="Soil", envgrad=0, cross=0)) +
+  annotation_custom2(add[[4]], data=data.frame(set="Fungi",nestedness="Capture", envgrad=0, cross=0)) +
+  annotation_custom2(add[[5]], data=data.frame(set="Fungi",nestedness="Retreat", envgrad=0, cross=0)) +
+  annotation_custom2(add[[6]], data=data.frame(set="Fungi",nestedness="Soil", envgrad=0, cross=0)) 
+g10
+  
+```
+
+#### Supplementary
+```{r 02_Processes_DistDecay}
 ## distance gradient plots
 g6 <- ggplot(sample_dist, aes(dist, cross)) + 
   facet_grid(nestedness~set) + 
@@ -1678,107 +1804,7 @@ g6 <- ggplot(sample_dist, aes(dist, cross)) +
   xlab("Distance between colonies\n(km)") + ylab("Compositional similarity") + coord_cartesian(ylim=c(0,1))## distance gradient plots
 ```
 
-#### Supplementary
-```{r 02_Processes_RegressionEnv, fig.width=11, fig.height=9}
-## environment gradient plots
-g5 <- ggplot(sample_dist, aes(envgrad, cross)) + 
-  facet_grid(nestedness~set) + 
-  geom_point(aes(shape=compare, color=nestedness), show.legend = c(color=F)) +
-  scale_shape_manual(values=c(17,20, 15)) +
-  stat_smooth(aes(linetype=transect.wb), 
-              method="lm", formula='y~x', color="black")+
-  ggpmisc::stat_poly_eq(formula=y ~ x, parse=T, label.x = "left",
-                        label.y="bottom",vjust=-0.5, vstep=-0.3,
-                        aes(linetype=transect.wb,
-                            label=paste("bold(\"",
-                                        c("Within","Between"
-                                          )[stat(linetype)],
-                                        " transect:  \")*",
-                                        after_stat(eq.label), 
-                                        sep = "")), size=2.5) +
-  geom_label(data=t1, aes(envgrad, cross, 
-                          label = paste("R^2==",round(X1.1,2))), 
-             parse = TRUE, hjust=1, vjust=0) + 
-  scale_color_manual(values=colorblind[c(2,1,3)]) +
-  scale_linetype_manual(values=c("solid","41")) +
-  theme_bw(base_size = 12) + 
-  theme(plot.margin=unit(c(1.5,0.5,0,0.5), "lines"),
-        legend.spacing = unit(2, "lines"),
-        legend.key.spacing = unit(1, "lines"),
-        legend.text=element_text(margin=margin(0,0,0,3)),
-        legend.justification = "left", legend.position="bottom",
-        legend.box="horizontal", legend.box.spacing = unit(0.2,"lines"),
-        legend.box.margin = margin(0,1,0,1,"lines"),
-        strip.background = element_blank(),
-        strip.text.x=element_text(size=18, face="bold", family="mono"),
-        strip.text.y=element_text(size=16, face="bold", family="mono")) +
-  guides(shape=guide_legend(title=NULL, direction="horizontal", byrow = F,
-                            override.aes = list(size=3)),
-         linetype=guide_legend(title=NULL, direction="vertical", order=1,
-                               reverse = F, keywidth = unit(1, "cm"))) +
-  xlab("Environmental dissimilarity\n(Temp:AridIndex)") + ylab("Compositional similarity") + 
-  coord_cartesian(ylim=c(0,1))
-
-
-#egg::ggarrange(g5,g6,nrow=1)
-
-```
-
-```{r}
-
-vennplot <- function(venn){
-  vp <- ggdraw() + draw_plot(as_grob(venn)) +
-    draw_plot(as_grob(venn$plot)) + ## panel B bottom
-    draw_plot_label(paste("R^2 ==", sum(venn$fracts$fracts[-4])),0.15,0.3, 
-                  fontface="plain", size=9, parse=T)
-  return(vp)
-}
-
-annotation_custom2 <- function (grob, xmin = 1.8, xmax = 4.2, ymin = 0.5, ymax = Inf, data){
-  layer(data = data, stat = StatIdentity, position = PositionIdentity, 
-        geom = ggplot2:::GeomCustomAnn,
-        inherit.aes = TRUE, params = list(grob = grob, 
-                                          xmin = xmin, xmax = xmax, 
-                                          ymin = ymin, ymax = ymax))
-}
-
-img.list <- list(vennplot(vp_bact$capture),
-                 vennplot(vp_bact$retreat),
-                 vennplot(vp_bact$soil),
-                 vennplot(vp_fung$capture),
-                 vennplot(vp_fung$retreat),
-                 vennplot(vp_fung$soil))
-
-g5
-# Get the current viewport tree
-a <- current.vpTree()
-b <- names(a$children$layout$children)
-panel.vp <- b[stringr::str_detect(b, "panel-")]
-# set up a viewport for my image; always top left
-vp.img <- grid::viewport(x=unit(0.55,"npc"), y=unit(0.75,"npc"), 
-                         width=unit(0.4, "npc"), height=unit(0.55,"npc"), just = "right")
-# add the images to each facet
-add <- list()
-for(i in 1:6){
-  # checkout viewport for panel i
-  grid::seekViewport(panel.vp[i])
-  # draw my image
-  #grid::grid.draw(grid::grobTree(as_grob(img.list[[i]]), vp=vp.img))
-  #my_box <- roundrectGrob(gp = gpar(fill = NA, col = "black", lwd = 0.8))
-  add[[i]] <- grid::grobTree(as_grob(img.list[[i]]), vp=vp.img)
-}
-
-g10 <- g5 + 
-  annotation_custom2(add[[1]], data=data.frame(set="Bacteria",nestedness="Capture", envgrad=0, cross=0)) +
-  annotation_custom2(add[[2]], data=data.frame(set="Bacteria",nestedness="Retreat", envgrad=0, cross=0)) +
-  annotation_custom2(add[[3]], data=data.frame(set="Bacteria",nestedness="Soil", envgrad=0, cross=0)) +
-  annotation_custom2(add[[4]], data=data.frame(set="Fungi",nestedness="Capture", envgrad=0, cross=0)) +
-  annotation_custom2(add[[5]], data=data.frame(set="Fungi",nestedness="Retreat", envgrad=0, cross=0)) +
-  annotation_custom2(add[[6]], data=data.frame(set="Fungi",nestedness="Soil", envgrad=0, cross=0))
-  
-```
-
-```{r 02_Processes_FigureS4, fig.width=13, fig.height=9}
+```{r 02_Processes_FigureS4, fig.width=13, fig.height=9, dpi=500, out.width="18cm"}
 egg::ggarrange(g10,g6, nrow=1)
 ```
 
@@ -1974,7 +2000,7 @@ CCplot <- function(input, title){
 
 ```
 
-```{r 03_CrossCompar_setup, fig.width=4, fig.height=7}
+```{r 03_CrossCompar_setup}
 
 load("output/crosscomparison_both.RD")
 
@@ -1999,13 +2025,17 @@ ddplot <- function(df, labs){
     scale_linetype_manual(values="12") +
     guides(linetype=guide_legend(title=NULL, keywidth=unit(1,"cm"))) +
     theme_bw(base_size = 12) + 
-    theme(plot.margin=unit(c(1.5,0.5,0,0.5), "lines"),
+    theme(plot.margin=unit(c(0.5,0.5,0,0.5), "lines"),
+          panel.border=element_rect(linewidth=1),
+          axis.ticks=element_line(linewidth=1),
+          axis.text=element_text(size=12, color="black"),
+          axis.title=element_text(size=14, color="black"),
           legend.box="vertical",
           legend.spacing.x = unit(3, "lines"), legend.spacing.y = unit(-0.25, "lines"),
-          legend.position = "bottom", legend.justification = "right",
+          legend.position = "bottom", legend.justification = "center",
           legend.box.spacing = unit(0.2,"lines"),
           legend.box.margin = margin(0,1,0,1,"lines"),
-          legend.text = element_text(margin = margin(l = 3)),
+          legend.text = element_text(margin = margin(l = 3), size=12),
           strip.text.x = element_text(hjust=0.5, face="bold", family="mono", size=18),
           strip.text.y = element_text(hjust=0.5, face="bold", family="mono", size=16),
           strip.background = element_blank(), strip.clip="off",) +
@@ -2029,18 +2059,21 @@ names(ztab) <- c("set","nestedness","z","p-val")
 
 ztab$nestedness <- factor(ztab$nestedness, levels=levels(df$nestedness))
 
-ztab
+ztab  
 
 g9 <- ddplot(df, subset(ztab, subset=nestedness%in%df$nestedness)) +
   facet_grid(nestedness ~ set, scales="free_y") +
-  scale_color_manual(values=colorblind[4:6])
+  scale_color_manual(values=colorblind[4:6]) +
+  labs(tag="B") + 
+  theme(plot.tag=element_text(size = 26, face = "bold"),
+        plot.tag.position = c(0.02, 0.99))
 
 ```
 
-```{r, fig.width=12, fig.height=9}
+```{r, fig.width=12, fig.height=9, dpi=500}
 library(patchwork)
-(g10  + g9) + plot_layout(widths=c(1.75,1)) + 
-  plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size = 24, face = "bold"))
+
+(g10  + g9) + plot_layout(widths=c(1.75,1)) 
 
 ```
 
@@ -2424,7 +2457,7 @@ try4 <- fung$CoefVar$CV %>%
   left_join(unique(fung$meanProp[,c(1,5)]))
 ```
 
-```{r 04_SourceTracker_Figure4, fig.height=4.5, fig.width=9.5}
+```{r 04_SourceTracker_Figure4, fig.height=4.5, fig.width=9.5, dpi=500}
 pull_ra_dat <- function(pullcomm){
   r <- pullcomm[grep("retreat",row.names(pullcomm)),] %>% 
     apply(1, function(x){x/sum(x)}) %>% reshape2::melt() %>%  cbind(type="retreat")
@@ -2491,6 +2524,10 @@ bars <- na.omit(try10)%>%group_by(set,type,g.cv)%>%
   guides(color="none", fill="none") + ylim(0,1) +
   theme(strip.text.x = element_text(family="mono", face="bold", size=15),
         strip.background = element_blank(),
+        panel.border=element_rect(linewidth=1),
+        axis.ticks=element_line(linewidth=1),
+        axis.text=element_text(color="black"),
+        axis.title=element_text( color="black"),
         legend.position="bottom", legend.direction="horizontal", legend.title = element_blank(),
         plot.title = element_text(hjust=0.5, size=18),
         plot.margin = margin(2,2,2,1,"mm")) +
